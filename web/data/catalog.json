@@ -4,6 +4,12 @@
       "id": "part-ps11752778",
       "partNumber": "PS11752778",
       "title": "Lower rack wheel (case-study sample)",
+      "keywords": [
+        "lower rack",
+        "rack wheel",
+        "dishwasher rack",
+        "lower rack wheel"
+      ],
       "installSteps": "1) Open the dishwasher and slide out the lower rack.\n2) Pry the old wheel off the rack axle with flat pliers.\n3) Press the new wheel onto the axle until it clicks.",
       "applianceFamily": "dishwasher"
     }
@@ -28,7 +34,11 @@
         "Check the water supply valve behind the fridge and the fill tube for ice blockage.",
         "If still no ice, note any blinking pattern on the ice maker module (service manual) before replacing the ice maker assembly."
       ],
-      "matchIncludesAll": ["whirlpool", "ice maker"]
+      "matchIncludesAll": ["whirlpool", "ice maker"],
+      "matchFlexible": [
+        ["ice maker", "icemaker", "ice-maker"],
+        ["not working", "broken", "no ice", "fix", "stopped", "won't", "wont"]
+      ]
     }
   ]
 }

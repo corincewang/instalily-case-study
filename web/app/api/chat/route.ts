@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { retrieveExact } from "@/lib/retrieveExact";
+
+import { runToolsForUserMessage } from "@/lib/agentTools";
+import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
+import { runChatWithLlmTools } from "@/lib/llm/runChatAgent";
 
 type ChatRequestBody = {
   message?: unknown;
@@ -30,40 +33,40 @@ export async function POST(request: Request) {
     );
   }
 
-  const { citations, part, compatibility, guide } = retrieveExact(message);
+  const useLlm = Boolean(process.env.OPENAI_API_KEY?.trim());
 
-  let reply: string;
-  if (!part && !compatibility && !guide) {
-    reply =
-      "No exact catalog match (part #, known model, or repair-guide keywords). " +
-      `Next step: LLM + broader retrieval. Your message: ${message.slice(0, 200)}`;
-  } else {
-    const chunks: string[] = [];
-    if (part) {
-      chunks.push(
-        `**${part.title} (${part.partNumber})**\n\nInstallation (from part catalog):\n${part.installSteps}`
+  if (useLlm) {
+    try {
+      const out = await runChatWithLlmTools(message);
+      return NextResponse.json({
+        reply: out.reply,
+        blocks: [] as const,
+        citations: out.citations,
+        suggested_actions: [] as const,
+        normalized_part_numbers: out.normalized_part_numbers,
+        tool_trace: out.tool_trace,
+        used_llm: true,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "LLM error";
+      return NextResponse.json(
+        { error: "llm_failed", message: msg },
+        { status: 502 }
       );
     }
-    if (compatibility) {
-      chunks.push(
-        `**Compatibility** — model **${compatibility.model}** with **${compatibility.partNumber}**: ` +
-          `${compatibility.compatible ? "Compatible (sample data)." : "Not compatible (sample data)."}\n` +
-          compatibility.note
-      );
-    }
-    if (guide) {
-      chunks.push(
-        `**${guide.brand} ${guide.appliance} — ${guide.topic}** (repair guide)\n\n` +
-          guide.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")
-      );
-    }
-    reply = chunks.join("\n\n---\n\n");
   }
+
+  const { retrieval, tool_trace, normalization } =
+    runToolsForUserMessage(message);
+  const reply = formatCatalogReplyFromRetrieval(retrieval, message);
 
   return NextResponse.json({
     reply,
     blocks: [] as const,
-    citations,
+    citations: retrieval.citations,
     suggested_actions: [] as const,
+    normalized_part_numbers: normalization.part_numbers,
+    tool_trace,
+    used_llm: false,
   });
 }
