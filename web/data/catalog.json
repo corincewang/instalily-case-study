@@ -1,0 +1,34 @@
+{
+  "parts": [
+    {
+      "id": "part-ps11752778",
+      "partNumber": "PS11752778",
+      "title": "Lower rack wheel (case-study sample)",
+      "installSteps": "1) Open the dishwasher and slide out the lower rack.\n2) Pry the old wheel off the rack axle with flat pliers.\n3) Press the new wheel onto the axle until it clicks.",
+      "applianceFamily": "dishwasher"
+    }
+  ],
+  "compatibilities": [
+    {
+      "id": "compat-wdt780-ps11752778",
+      "model": "WDT780SAEM1",
+      "partNumber": "PS11752778",
+      "compatible": true,
+      "note": "Sample row for case study: this model is treated as compatible with PS11752778 in our static catalog."
+    }
+  ],
+  "repairGuides": [
+    {
+      "id": "guide-whirlpool-ice-maker",
+      "brand": "Whirlpool",
+      "appliance": "refrigerator",
+      "topic": "Ice maker not working",
+      "steps": [
+        "Confirm the bail arm is down and the ice maker is switched on.",
+        "Check the water supply valve behind the fridge and the fill tube for ice blockage.",
+        "If still no ice, note any blinking pattern on the ice maker module (service manual) before replacing the ice maker assembly."
+      ],
+      "matchIncludesAll": ["whirlpool", "ice maker"]
+    }
+  ]
+}

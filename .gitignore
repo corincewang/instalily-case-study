@@ -1,0 +1,24 @@
+# Root (CRA legacy)
+node_modules/
+build/
+coverage/
+
+# Next app
+web/node_modules/
+web/.next/
+web/out/
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+
+# OS & editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
