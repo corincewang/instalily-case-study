@@ -16,6 +16,8 @@ export type LlmChatResult = {
   normalized_part_numbers: string[];
   tool_trace: ToolTraceEntry[];
   used_llm: true;
+  /** Last catalog retrieval; API route builds blocks from this (not sent as a top-level field). */
+  retrieval: ReturnType<typeof retrieveExact>;
 };
 
 const MAX_TOOL_ROUNDS = 6;
@@ -23,12 +25,12 @@ const MAX_TOOL_ROUNDS = 6;
 export async function runChatWithLlmTools(
   userMessage: string
 ): Promise<LlmChatResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is not set");
   }
 
-  const model = process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
+  const model = (process.env.OPENAI_MODEL ?? "gpt-5.4-mini").trim();
   const openai = new OpenAI({ apiKey });
 
   const messages: ChatCompletionMessageParam[] = [
@@ -125,5 +127,6 @@ export async function runChatWithLlmTools(
     normalized_part_numbers: Array.from(normalized),
     tool_trace,
     used_llm: true,
+    retrieval: lastRetrieval,
   };
 }

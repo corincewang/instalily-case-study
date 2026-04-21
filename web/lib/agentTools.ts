@@ -34,7 +34,11 @@ export function runToolsForUserMessage(message: string): {
       ok: true,
       output: normalization,
     },
-    { name: CATALOG_SEARCH_TOOL_NAME, ok: true },
+    {
+      name: CATALOG_SEARCH_TOOL_NAME,
+      ok: true,
+      output: retrieval,
+    },
   ];
 
   return { normalization, retrieval, tool_trace };

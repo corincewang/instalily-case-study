@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { runToolsForUserMessage } from "@/lib/agentTools";
+import {
+  buildBlocksFromRetrieval,
+  buildSuggestedActionsFromRetrieval,
+} from "@/lib/buildChatBlocks";
 import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
 import { runChatWithLlmTools } from "@/lib/llm/runChatAgent";
 
@@ -38,11 +42,15 @@ export async function POST(request: Request) {
   if (useLlm) {
     try {
       const out = await runChatWithLlmTools(message);
+      const blocks = buildBlocksFromRetrieval(out.retrieval);
+      const suggested_actions = buildSuggestedActionsFromRetrieval(
+        out.retrieval
+      );
       return NextResponse.json({
         reply: out.reply,
-        blocks: [] as const,
+        blocks,
         citations: out.citations,
-        suggested_actions: [] as const,
+        suggested_actions,
         normalized_part_numbers: out.normalized_part_numbers,
         tool_trace: out.tool_trace,
         used_llm: true,
@@ -59,12 +67,14 @@ export async function POST(request: Request) {
   const { retrieval, tool_trace, normalization } =
     runToolsForUserMessage(message);
   const reply = formatCatalogReplyFromRetrieval(retrieval, message);
+  const blocks = buildBlocksFromRetrieval(retrieval);
+  const suggested_actions = buildSuggestedActionsFromRetrieval(retrieval);
 
   return NextResponse.json({
     reply,
-    blocks: [] as const,
+    blocks,
     citations: retrieval.citations,
-    suggested_actions: [] as const,
+    suggested_actions,
     normalized_part_numbers: normalization.part_numbers,
     tool_trace,
     used_llm: false,
