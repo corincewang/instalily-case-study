@@ -3,10 +3,10 @@ import { retrieveExact } from "./retrieveExact";
 type Retrieval = ReturnType<typeof retrieveExact>;
 
 /**
- * Two-card vocabulary, mapped to the case-study prompt:
- *   product  — "product information"
- *   support  — "assist with customer transactions" (install / compat / repair)
- * Each assistant turn emits AT MOST one product + one support card (usually one).
+ * Two-card vocabulary:
+ *   product  — catalog-backed part row (commerce metadata)
+ *   support  — install / compat / repair / candidates structured cards
+ * Each assistant turn usually emits one primary card (sometimes product + support).
  */
 
 export type ProductBlock = {
@@ -71,6 +71,8 @@ export type SupportBlock = {
   id: string;
   title: string;
   subtitle?: string;
+  /** Install-only: the PS part number, used by the UI to fetch a video. */
+  partNumber?: string;
   verdict?: { label: string; tone: "ok" | "warn" };
   note?: string;
   steps?: string[];
@@ -316,6 +318,7 @@ function buildInstallSupportBlock(
     id: part.id,
     title: `Install ${part.partNumber}`,
     subtitle: `${part.title} · ${part.applianceFamily}`,
+    partNumber: part.partNumber,
     steps: parseInstallSteps(part.installSteps),
     experience: aggregateInstallSignal(part),
     stories: pickTopStories(part, 2),
@@ -483,7 +486,7 @@ export function detectClarification(
           question:
             "Which part and which appliance model are you checking? Share the PS number from the part and the model label from your fridge / dishwasher.",
           hints: [
-            "e.g. Is PS11752778 compatible with WDT780SAEM1?",
+            "Example: Is PS11752778 compatible with WDT780SAEM1?",
             "You can find the model tag behind the kickplate or on the door frame.",
           ],
         };
@@ -579,8 +582,8 @@ export function detectClarification(
           "Example: Find part PS11752778",
           "Example: Show me refrigerator door bin parts",
           "Example: I need a dishwasher door latch",
-          "What is a PS number?",
-          "What is an OEM code?",
+          "Example: What is a PS number?",
+          "Example: What is an OEM code?",
         ],
       };
     }
@@ -754,10 +757,25 @@ export function buildClarifyReplyFromRetrieval(
   // we can ask about "model" even when `r.part` was found (e.g. "Is PS11752778 compatible?").
   const clar = detectClarification(userMessage, r, intent);
   if (!clar) return null;
-  return {
-    reply: clar.question,
-    hints: clar.hints.map((h) => h.replace(/^Example:\s*/i, "")),
-  };
+
+  // Split hints: "Example: ..." entries become clickable chips; plain informational
+  // tips get appended to the reply text so they read naturally instead of as buttons.
+  const exampleHints: string[] = [];
+  const tipHints: string[] = [];
+  for (const h of clar.hints) {
+    if (/^Example:\s*/i.test(h)) {
+      exampleHints.push(h.replace(/^Example:\s*/i, ""));
+    } else {
+      tipHints.push(h);
+    }
+  }
+
+  const reply =
+    tipHints.length > 0
+      ? `${clar.question}\n\n${tipHints.join(" ")}`
+      : clar.question;
+
+  return { reply, hints: exampleHints };
 }
 
 export function buildBlocksFromRetrieval(
@@ -862,16 +880,12 @@ export function buildSuggestedActionsFromRetrieval(
 
   switch (intent) {
     case "buy":
+      // User asked price / stock — only suggest the natural pre-purchase check.
       if (pn) {
         push({
           id: "check-fit",
           label: "Check fit",
           prompt: `Is ${pn} compatible with my model?`,
-        });
-        push({
-          id: "install",
-          label: "Install",
-          prompt: `How do I install ${pn}?`,
         });
       }
       break;
@@ -890,31 +904,30 @@ export function buildSuggestedActionsFromRetrieval(
       }
       break;
     case "install":
-      if (pn) {
-        push({
-          id: "check-fit",
-          label: "Check fit",
-          prompt: `Is ${pn} compatible with my model?`,
-        });
-        push({
-          id: "price-stock",
-          label: "Price & stock",
-          prompt: `How much is ${pn} and is it in stock?`,
-        });
-      }
+      // User already asked for install — avoid unrelated shopping pivots (check fit / price)
+      // that read like upsell rather than a natural continuation of the install answer.
       break;
     case "compat":
-      if (pn) {
-        push({
-          id: "install",
-          label: "Install",
-          prompt: `How do I install ${pn}?`,
-        });
-        push({
-          id: "price-stock",
-          label: "Price & stock",
-          prompt: `How much is ${pn} and is it in stock?`,
-        });
+      if (r.compatibility && pn) {
+        if (!r.compatibility.compatible) {
+          // Do not offer install / buy for a known bad part–model pair.
+          push({
+            id: "find-right-part",
+            label: "Find the right part",
+            prompt: `Help me find the correct refrigerator or dishwasher part for model ${r.compatibility.model}`,
+          });
+        } else {
+          push({
+            id: "install",
+            label: "Install",
+            prompt: `How do I install ${pn}?`,
+          });
+          push({
+            id: "price-stock",
+            label: "Price & stock",
+            prompt: `How much is ${pn} and is it in stock?`,
+          });
+        }
       }
       break;
     case "repair":
@@ -924,25 +937,35 @@ export function buildSuggestedActionsFromRetrieval(
           label: "Related parts",
           prompt: `What parts are needed to fix ${r.guide.brand} ${r.guide.appliance} ${r.guide.topic}?`,
         });
-        push({
-          id: "install-generic",
-          label: "Installation help",
-          prompt: `Installation help ${r.guide.brand} ${r.guide.appliance}`,
-        });
+        // Only add part-specific pivots when we already surfaced candidate parts —
+        // generic "installation help" is a weak match to a repair-troubleshooting reply.
+        if (r.candidates && r.candidates.length > 0) {
+          const top = r.candidates[0].part.partNumber;
+          push({
+            id: "price-stock-top",
+            label: `Price & stock (${top})`,
+            prompt: `How much is ${top} and is it in stock?`,
+          });
+          push({
+            id: "check-fit-top",
+            label: `Check fit (${top})`,
+            prompt: `Is ${top} compatible with my model?`,
+          });
+        }
       }
       break;
     case "diagnose":
       if (r.candidates && r.candidates.length > 0) {
         const top = r.candidates[0].part.partNumber;
         push({
-          id: "troubleshoot",
-          label: "Troubleshoot",
-          prompt: `How do I troubleshoot before replacing ${top}?`,
+          id: "price-stock-top",
+          label: `Price & stock (${top})`,
+          prompt: `How much is ${top} and is it in stock?`,
         });
         push({
-          id: "install-top",
-          label: `Install ${top}`,
-          prompt: `How do I install ${top}?`,
+          id: "check-fit-top",
+          label: `Check fit (${top})`,
+          prompt: `Is ${top} compatible with my model?`,
         });
       }
       break;
@@ -951,18 +974,13 @@ export function buildSuggestedActionsFromRetrieval(
         const top = r.searchResults[0].part.partNumber;
         push({
           id: "price-stock-top",
-          label: `Price & stock ${top}`,
+          label: `Price & stock (${top})`,
           prompt: `How much is ${top} and is it in stock?`,
         });
         push({
           id: "check-fit-top",
-          label: `Check fit ${top}`,
+          label: `Check fit (${top})`,
           prompt: `Is ${top} compatible with my model?`,
-        });
-        push({
-          id: "install-top",
-          label: `Install ${top}`,
-          prompt: `How do I install ${top}?`,
         });
       } else if (pn) {
         push({
@@ -990,25 +1008,11 @@ export function buildSuggestedActionsFromRetrieval(
           label: "Check fit",
           prompt: `Is ${pn} compatible with my model?`,
         });
-        push({
-          id: "install",
-          label: "Install",
-          prompt: `How do I install ${pn}?`,
-        });
       }
       break;
   }
 
-  // Escalation chip — available when we have real retrieval results (part, compat,
-  // guide, or candidates), giving the user a clear path to human support.
-  const hasResult = !!(r.part ?? r.compatibility ?? r.guide ?? (r.candidates && r.candidates.length > 0));
-  if (hasResult && !oos) {
-    push({
-      id: "escalate",
-      label: "Speak to an agent",
-      prompt: "I'd like to speak with a human support agent",
-    });
-  }
-
-  return out.slice(0, 5);
+  // Keep follow-up chips sparse: only high-confidence pivots from the switch above
+  // (plus OOS/clarify example prompts). No blanket "Speak to an agent" on every hit.
+  return out.slice(0, 3);
 }

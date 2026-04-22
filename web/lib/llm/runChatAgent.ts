@@ -10,12 +10,14 @@ import {
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
   SEARCH_BY_SYMPTOM_TOOL_NAME,
+  SEMANTIC_SEARCH_TOOL_NAME,
 } from "../agentTools";
 import catalog from "../../data/catalog.json";
 import { formatCatalogReplyFromRetrieval } from "../formatCatalogReply";
 import type { Citation, SessionContext } from "../retrieveExact";
 import { retrieveExact } from "../retrieveExact";
 import { fetchPartPageTool } from "../tools/fetchPartPage";
+import { semanticSearchTool } from "../tools/semanticSearch";
 import { executePartselectTool } from "../toolExecutor";
 import { PARTSELECT_OPENAI_TOOLS } from "./openaiTools";
 import { PARTSELECT_AGENT_SYSTEM } from "./systemPrompt";
@@ -155,34 +157,20 @@ export type LlmChatResult = {
 
 const MAX_TOOL_ROUNDS = 6;
 
-export async function runChatWithLlmTools(
+/** Shared setup: parse args, build messages, run the tool loop. */
+async function runToolLoop(
   userMessage: string,
-  history: HistoryTurn[] = [],
-  context?: SessionContext
-): Promise<LlmChatResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
-
-  const model = (process.env.OPENAI_MODEL ?? "gpt-5.4-mini").trim();
-  const openai = new OpenAI({ apiKey });
-
-  // Instead of replaying full history turns (expensive: O(tokens × turns)),
-  // we inject a single compact session-context line into the system prompt.
-  // This gives the LLM the resolved part/model without inflating the context window.
-  // The resolved values come from `extractContext` in the route, which scans history
-  // deterministically — the LLM never needs to re-read those turns itself.
-  const contextLines: string[] = [];
-  if (context?.partNumber) contextLines.push(`part ${context.partNumber}`);
-  if (context?.model) contextLines.push(`model ${context.model}`);
-  const sessionNote =
-    contextLines.length > 0
-      ? `\n\n[Session context — resolved from prior turns: ${contextLines.join(", ")}. Do not ask the user to repeat this information; use it directly when calling tools.]`
-      : "";
-
-  const systemContent = PARTSELECT_AGENT_SYSTEM + sessionNote;
-
+  history: HistoryTurn[],
+  context: SessionContext | undefined,
+  openai: OpenAI,
+  model: string,
+  systemContent: string
+): Promise<{
+  messages: ChatCompletionMessageParam[];
+  tool_trace: ToolTraceEntry[];
+  normalized: Set<string>;
+  lastRetrieval: ReturnType<typeof retrieveExact>;
+}> {
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: systemContent },
     { role: "user", content: userMessage },
@@ -201,23 +189,17 @@ export async function runChatWithLlmTools(
     });
 
     const choice = completion.choices[0]?.message;
-    if (!choice) {
-      break;
-    }
+    if (!choice) break;
 
     const toolCalls = choice.tool_calls ?? [];
     messages.push(choice);
-
-    if (toolCalls.length === 0) {
-      break;
-    }
+    if (toolCalls.length === 0) break;
 
     for (const tc of toolCalls) {
       if (tc.type !== "function") continue;
       const name = tc.function.name;
       const argsJson = tc.function.arguments ?? "{}";
 
-      // fetch_part_page is async (network call) — handle separately.
       let exec: ToolTraceEntry;
       if (name === FETCH_PART_PAGE_TOOL_NAME) {
         try {
@@ -227,15 +209,19 @@ export async function runChatWithLlmTools(
         } catch {
           exec = { name: FETCH_PART_PAGE_TOOL_NAME, ok: false, output: { error: "fetch_failed" } };
         }
+      } else if (name === SEMANTIC_SEARCH_TOOL_NAME) {
+        try {
+          const args = JSON.parse(argsJson) as { query?: string };
+          const result = await semanticSearchTool({ query: args.query ?? "" });
+          exec = { name: SEMANTIC_SEARCH_TOOL_NAME, ok: result.ok, output: result };
+        } catch {
+          exec = { name: SEMANTIC_SEARCH_TOOL_NAME, ok: false, output: { error: "semantic_search_failed" } };
+        }
       } else {
         exec = executePartselectTool(name, argsJson, context);
       }
 
-      tool_trace.push({
-        name: exec.name,
-        ok: exec.ok,
-        output: exec.output,
-      });
+      tool_trace.push({ name: exec.name, ok: exec.ok, output: exec.output });
 
       if (exec.ok && exec.name === NORMALIZE_PART_NUMBER_TOOL_NAME && exec.output) {
         const o = exec.output as { part_numbers: string[] };
@@ -254,56 +240,141 @@ export async function runChatWithLlmTools(
   }
 
   if (!lastRetrieval) {
-    // The LLM called a specific tool but never called catalog_search.
-    // Build the retrieval object directly from the tool outputs — no re-query.
     lastRetrieval =
-      buildRetrievalFromTrace(tool_trace) ??
-      // Ultimate fallback: user message had no useful tool output at all.
-      retrieveExact(userMessage, context);
-    tool_trace.push({
-      name: CATALOG_SEARCH_TOOL_NAME,
-      ok: true,
-      output: lastRetrieval,
-    });
+      buildRetrievalFromTrace(tool_trace) ?? retrieveExact(userMessage, context);
+    tool_trace.push({ name: CATALOG_SEARCH_TOOL_NAME, ok: true, output: lastRetrieval });
   }
+
+  return { messages, tool_trace, normalized, lastRetrieval };
+}
+
+function buildSystemContent(context?: SessionContext): string {
+  const contextLines: string[] = [];
+  if (context?.partNumber) contextLines.push(`part ${context.partNumber}`);
+  if (context?.model) contextLines.push(`model ${context.model}`);
+  const sessionNote =
+    contextLines.length > 0
+      ? `\n\n[Session context — resolved from prior turns: ${contextLines.join(", ")}. Do not ask the user to repeat this information; use it directly when calling tools.]`
+      : "";
+  return PARTSELECT_AGENT_SYSTEM + sessionNote;
+}
+
+function applyConsistencyGuard(
+  replyText: string,
+  retrieval: ReturnType<typeof retrieveExact>,
+  userMessage: string
+): string {
+  const hasContent = !!(
+    retrieval.guide ??
+    retrieval.part ??
+    retrieval.compatibility ??
+    (retrieval.candidates && retrieval.candidates.length > 0)
+  );
+  const llmSaysMiss =
+    /couldn.t\s+match|couldn.t\s+find|no\s+match|not\s+find|unable\s+to\s+find|nothing\s+in|didn.t\s+find|not\s+found\s+in|no\s+result/i.test(
+      replyText
+    );
+  return hasContent && llmSaysMiss
+    ? formatCatalogReplyFromRetrieval(retrieval, userMessage)
+    : replyText;
+}
+
+export async function runChatWithLlmTools(
+  userMessage: string,
+  history: HistoryTurn[] = [],
+  context?: SessionContext
+): Promise<LlmChatResult> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+
+  const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
+  const openai = new OpenAI({ apiKey });
+  const systemContent = buildSystemContent(context);
+
+  const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
+    userMessage, history, context, openai, model, systemContent
+  );
 
   const lastMsg = messages[messages.length - 1]!;
-  let replyText = "";
-  if (lastMsg.role === "assistant" && typeof lastMsg.content === "string") {
-    replyText = lastMsg.content.trim();
-  }
+  let replyText =
+    lastMsg.role === "assistant" && typeof lastMsg.content === "string"
+      ? lastMsg.content.trim()
+      : "";
 
   if (!replyText) {
-    const finalCompletion = await openai.chat.completions.create({
-      model,
-      messages,
-    });
+    const finalCompletion = await openai.chat.completions.create({ model, messages });
     const m = finalCompletion.choices[0]?.message;
-    if (m) {
-      messages.push(m);
-    }
+    if (m) messages.push(m);
     replyText = typeof m?.content === "string" ? m.content.trim() : "";
   }
 
-  if (!replyText) {
-    replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
-  }
+  if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
+  replyText = applyConsistencyGuard(replyText, lastRetrieval, userMessage);
 
-  // Consistency guard: if the LLM said "no match / couldn't find" but retrieval
-  // actually found content (guide, part, candidates), the LLM was working from
-  // stale/incomplete tool output. Override with the deterministic reply so the
-  // text and the cards always agree.
-  const hasContent = !!(
-    lastRetrieval.guide ??
-    lastRetrieval.part ??
-    lastRetrieval.compatibility ??
-    (lastRetrieval.candidates && lastRetrieval.candidates.length > 0)
+  return {
+    reply: replyText,
+    citations: lastRetrieval.citations,
+    normalized_part_numbers: Array.from(normalized),
+    tool_trace,
+    used_llm: true,
+    retrieval: lastRetrieval,
+  };
+}
+
+/**
+ * Streaming variant: runs the tool loop (blocking), then streams the final
+ * LLM reply token-by-token via `onToken`. Returns retrieval + metadata so the
+ * caller can build blocks and send them after the stream completes.
+ */
+export async function streamChatWithLlmTools(
+  userMessage: string,
+  history: HistoryTurn[],
+  context: SessionContext | undefined,
+  onToken: (text: string) => void
+): Promise<LlmChatResult> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+
+  const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
+  const openai = new OpenAI({ apiKey });
+  const systemContent = buildSystemContent(context);
+
+  const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
+    userMessage, history, context, openai, model, systemContent
   );
-  const llmSaysMiss = /couldn.t\s+match|couldn.t\s+find|no\s+match|not\s+find|unable\s+to\s+find|nothing\s+in|didn.t\s+find|not\s+found\s+in|no\s+result/i.test(replyText);
-  if (hasContent && llmSaysMiss) {
-    replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
+
+  // If the tool loop already produced a text reply (rare), stream it and return.
+  const lastMsg = messages[messages.length - 1]!;
+  let replyText =
+    lastMsg.role === "assistant" && typeof lastMsg.content === "string"
+      ? lastMsg.content.trim()
+      : "";
+
+  if (replyText) {
+    // Tool loop returned a text reply — emit it as a single token for consistency.
+    onToken(replyText);
+  } else {
+    // Stream the final reply from OpenAI.
+    const stream = await openai.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? "";
+      if (delta) {
+        replyText += delta;
+        onToken(delta);
+      }
+    }
   }
 
+  if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
+  replyText = applyConsistencyGuard(replyText, lastRetrieval, userMessage);
+
+  // If the guard overrode the reply, the tokens already sent were wrong — that's
+  // a rare edge case; we accept it and let the client reconcile via the `done` event.
   return {
     reply: replyText,
     citations: lastRetrieval.citations,

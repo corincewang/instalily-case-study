@@ -41,7 +41,7 @@ import {
 } from "@/lib/buildChatBlocks";
 import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
 import type { HistoryTurn } from "@/lib/llm/runChatAgent";
-import { runChatWithLlmTools } from "@/lib/llm/runChatAgent";
+import { streamChatWithLlmTools } from "@/lib/llm/runChatAgent";
 import type { Citation, SessionContext } from "@/lib/retrieveExact";
 
 /**
@@ -130,6 +130,36 @@ type ChatRequestBody = {
   history?: unknown;
 };
 
+/** NDJSON streaming helpers */
+const encoder = new TextEncoder();
+function encodeEvent(obj: unknown): Uint8Array {
+  return encoder.encode(JSON.stringify(obj) + "\n");
+}
+
+function streamResponse(
+  fn: (send: (obj: unknown) => void) => Promise<void>
+): Response {
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) => controller.enqueue(encodeEvent(obj));
+      try {
+        await fn(send);
+      } catch (e) {
+        send({ type: "error", message: e instanceof Error ? e.message : "Unknown error" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   let body: ChatRequestBody;
   try {
@@ -186,67 +216,69 @@ export async function POST(request: Request) {
   ];
   for (const { pattern, reply } of GLOSSARY) {
     if (pattern.test(message)) {
-      return NextResponse.json({
-        reply,
-        blocks: [],
-        citations: [],
-        suggested_actions: [
-          { id: "g-find", label: "Find a part by PS number", prompt: "Find part PS11752778" },
-          { id: "g-compat", label: "Check compatibility", prompt: "Is PS11752778 compatible with WRS325SDHZ?" },
-        ],
-        no_evidence: true,
-        normalized_part_numbers: [],
-        tool_trace: [],
-        used_llm: false,
+      // Short glossary answers: stream the reply text word-by-word, then done.
+      const words = reply.split(" ");
+      return streamResponse(async (send) => {
+        for (const word of words) {
+          send({ type: "token", text: word + " " });
+          await new Promise((r) => setTimeout(r, 12));
+        }
+        send({
+          type: "done",
+          blocks: [],
+          citations: [],
+          suggested_actions: [
+            { id: "g-find", label: "Find a part by PS number", prompt: "Find part PS11752778" },
+            { id: "g-compat", label: "Check compatibility", prompt: "Is PS11752778 compatible with WRS325SDHZ?" },
+          ],
+          no_evidence: true,
+          normalized_part_numbers: [],
+          tool_trace: [],
+          used_llm: false,
+        });
       });
     }
   }
 
   const useLlm = Boolean(process.env.OPENAI_API_KEY?.trim());
-
-  // OOS gate runs first on the raw message — before retrieval results influence
-  // block building. If the message is out-of-scope, we force blocks to empty
-  // regardless of what retrieval found (e.g. an accidental keyword overlap).
-  // The in-scope whitelist inside `detectOutOfScope` ensures real in-domain
-  // queries (mentioning our appliances) bypass this gate.
   const oos = buildOutOfScopeReplyFromRetrieval(message);
 
   if (useLlm) {
-    try {
-      const out = await runChatWithLlmTools(message, history, context);
-      // If OOS, suppress all blocks — reply only.
+    return streamResponse(async (send) => {
+      const out = await streamChatWithLlmTools(
+        message,
+        history,
+        context,
+        (token) => send({ type: "token", text: token })
+      );
       const blocks = oos ? [] : buildBlocksFromRetrieval(out.retrieval, message);
       const clar =
         blocks.length === 0 && !oos
           ? buildClarifyReplyFromRetrieval(out.retrieval, message)
           : null;
-      const suggested_actions = buildSuggestedActionsFromRetrieval(
-        out.retrieval,
-        message
-      );
-      const citations = alignCitationsToBlocks(out.citations, blocks);
-      return NextResponse.json({
-        reply: oos ? oos.reply : clar ? clar.reply : out.reply,
+
+      // If OOS or clarify overrides the reply, emit the override text as a
+      // "replace" event so the client can swap out whatever was streamed.
+      const overrideReply = oos ? oos.reply : clar ? clar.reply : null;
+      if (overrideReply) {
+        send({ type: "replace", text: overrideReply });
+      }
+
+      send({
+        type: "done",
         blocks,
-        citations,
-        suggested_actions,
+        citations: alignCitationsToBlocks(out.citations, blocks),
+        suggested_actions: buildSuggestedActionsFromRetrieval(out.retrieval, message),
         no_evidence: blocks.length === 0,
         normalized_part_numbers: out.normalized_part_numbers,
         tool_trace: out.tool_trace,
         used_llm: true,
       });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "LLM error";
-      return NextResponse.json(
-        { error: "llm_failed", message: msg },
-        { status: 502 }
-      );
-    }
+    });
   }
 
-  // Deterministic (no-LLM) path.
+  // ── Deterministic (no-LLM) path ──────────────────────────────────────────
   const { tool_trace, normalization, retrieval } = runToolsForUserMessage(message, context);
-  // If OOS, suppress all blocks.
   const blocks = oos ? [] : buildBlocksFromRetrieval(retrieval, message);
   const clar =
     blocks.length === 0 && !oos ? buildClarifyReplyFromRetrieval(retrieval, message) : null;
@@ -258,14 +290,22 @@ export async function POST(request: Request) {
   const suggested_actions = buildSuggestedActionsFromRetrieval(retrieval, message);
   const citations = alignCitationsToBlocks(retrieval.citations, blocks);
 
-  return NextResponse.json({
-    reply,
-    blocks,
-    citations,
-    suggested_actions,
-    no_evidence: blocks.length === 0,
-    normalized_part_numbers: normalization.part_numbers,
-    tool_trace,
-    used_llm: false,
+  // Stream the deterministic reply word-by-word for a consistent streaming UX.
+  return streamResponse(async (send) => {
+    const words = reply.split(" ");
+    for (const word of words) {
+      send({ type: "token", text: word + " " });
+      await new Promise((r) => setTimeout(r, 12));
+    }
+    send({
+      type: "done",
+      blocks,
+      citations,
+      suggested_actions,
+      no_evidence: blocks.length === 0,
+      normalized_part_numbers: normalization.part_numbers,
+      tool_trace,
+      used_llm: false,
+    });
   });
 }

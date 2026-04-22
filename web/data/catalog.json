@@ -41,7 +41,9 @@
         "2198450",
         "2304235"
       ],
-      "relatedParts": ["PS11738120"],
+      "relatedParts": [
+        "PS11738120"
+      ],
       "repairStories": [
         {
           "id": "story-ps11752778-1",
@@ -199,8 +201,13 @@
       "reviewCount": 247,
       "manufacturer": "Whirlpool",
       "manufacturerPartNumber": "W10712394",
-      "replaces": ["AP6023703", "W10190961"],
-      "relatedParts": ["PS734936"],
+      "replaces": [
+        "AP6023703",
+        "W10190961"
+      ],
+      "relatedParts": [
+        "PS734936"
+      ],
       "repairStories": [
         {
           "id": "story-ps11738120-1",
@@ -210,7 +217,10 @@
           "location": "Columbus, OH",
           "difficulty": "Moderate",
           "timeLabel": "30–60 mins",
-          "toolsUsed": ["¼-inch nut driver", "Phillips screwdriver"],
+          "toolsUsed": [
+            "¼-inch nut driver",
+            "Phillips screwdriver"
+          ],
           "otherPartsUsed": [],
           "helpfulYes": 87,
           "helpfulTotal": 92
@@ -223,7 +233,10 @@
           "location": "Phoenix, AZ",
           "difficulty": "Moderate",
           "timeLabel": "30–60 mins",
-          "toolsUsed": ["¼-inch nut driver", "flat-head screwdriver"],
+          "toolsUsed": [
+            "¼-inch nut driver",
+            "flat-head screwdriver"
+          ],
           "otherPartsUsed": [],
           "helpfulYes": 64,
           "helpfulTotal": 68
@@ -236,8 +249,12 @@
           "location": "Denver, CO",
           "difficulty": "Moderate",
           "timeLabel": "30–60 mins",
-          "toolsUsed": ["¼-inch nut driver"],
-          "otherPartsUsed": ["PS734936"],
+          "toolsUsed": [
+            "¼-inch nut driver"
+          ],
+          "otherPartsUsed": [
+            "PS734936"
+          ],
           "helpfulYes": 112,
           "helpfulTotal": 118
         }
@@ -274,7 +291,7 @@
       ],
       "installSteps": "1) Shut off the water supply and unplug the refrigerator.\n2) Disconnect the inlet tubes and wiring harness from the valve.\n3) Mount the new valve, reconnect tubes + harness, restore water and power.",
       "applianceFamily": "refrigerator",
-      "price": 54.90,
+      "price": 54.9,
       "currency": "USD",
       "inStock": true,
       "shipEta": "Ships today if ordered by 3 PM ET",
@@ -282,8 +299,12 @@
       "reviewCount": 89,
       "manufacturer": "Whirlpool",
       "manufacturerPartNumber": "W10408179",
-      "replaces": ["AP5983848"],
-      "relatedParts": ["PS11738120"],
+      "replaces": [
+        "AP5983848"
+      ],
+      "relatedParts": [
+        "PS11738120"
+      ],
       "repairStories": [],
       "questions": []
     },
@@ -302,7 +323,7 @@
       ],
       "installSteps": "1) Remove the inner door panel screws along the top edge.\n2) Unplug the latch wiring harness and swap in the new latch.\n3) Reinstall the inner panel and test the door switch.",
       "applianceFamily": "dishwasher",
-      "price": 58.20,
+      "price": 58.2,
       "currency": "USD",
       "inStock": true,
       "shipEta": "Ships today if ordered by 3 PM ET",
@@ -310,10 +331,918 @@
       "reviewCount": 63,
       "manufacturer": "Whirlpool",
       "manufacturerPartNumber": "W10619006",
-      "replaces": ["AP5985208"],
+      "replaces": [
+        "AP5985208"
+      ],
       "relatedParts": [],
       "repairStories": [],
       "questions": []
+    },
+    {
+      "id": "part-ps12364199",
+      "partNumber": "PS12364199",
+      "title": "Refrigerator Door Shelf Bin",
+      "keywords": [
+        "refrigerator",
+        "door",
+        "shelf",
+        "242126602"
+      ],
+      "symptoms": [
+        "cracked door bin",
+        "broken door shelf",
+        "door bin won't stay in"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This manufacturer-certified Refrigerator Door Shelf Bin, also known as a crisper bin or door shelf bin, is made of clear plastic, and is easy to install.\nIt is used to hold items in the fridge, like jars, cans, and condiments and you'll be able to visually see if the part is broken or cracked.\nThis \n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 52.67,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.7,
+      "reviewCount": 135,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "242126602",
+      "replaces": [
+        "AP6278233"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps12364199-2",
+          "title": "Prompt",
+          "body": "Quickly received and perfect fit",
+          "author": "Betty L",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps12364199-4",
+          "title": "Exactly the right part.",
+          "body": "I'm very pleased with my experience with this company. Received the part very promptly and it is exactly the part for my refrigerator.",
+          "author": "Sam T",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/12364199-1-M-Frigidaire-242126602-Refrigerator-Door-Shelf-Bin.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps11701542",
+      "partNumber": "PS11701542",
+      "title": "Refrigerator Ice and Water Filter",
+      "keywords": [
+        "refrigerator",
+        "water",
+        "filter",
+        "edr1rxd1"
+      ],
+      "symptoms": [
+        "water tastes bad",
+        "filter needs replacing",
+        "dirty water",
+        "water flow slow"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) The EDR1RXD1 water filter provides clean, fresh-tasting water by reducing contaminants such as lead, chlorine, and particulates.\nDesigned for easy installation, this filter ensures your refrigerator water and ice are safe and refreshing with every use\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 84.45,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.8,
+      "reviewCount": 111,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "EDR1RXD1",
+      "replaces": [
+        "AP5982535",
+        "W10217316",
+        "W10291030",
+        "W10295370",
+        "W10295370A",
+        "W10569758",
+        "W10569760",
+        "W10569761"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11701542-2",
+          "title": "Great service",
+          "body": "It was easy to get the right part. Easy to install, thanks for such good service.",
+          "author": "Joseph R",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11701542-4",
+          "title": "Easy Repair",
+          "body": "Received the part quickly. Replaced the old one and my appliance is making ice again.",
+          "author": "Stephen S",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11701542-6",
+          "title": "All&#x2019;s well.",
+          "body": "The part arrived promptly and installation was easy despite an somewhat stiff door. All working well.",
+          "author": "Selma T",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11701542-1-M-Whirlpool-EDR1RXD1-Refrigerator-Ice-and-Water-Filter.jpg",
+      "videoId": "rryiwFOJBYg"
+    },
+    {
+      "id": "part-ps734935",
+      "partNumber": "PS734935",
+      "title": "Door Shelf Retainer Bar",
+      "keywords": [
+        "door",
+        "shelf",
+        "retainer",
+        "240534901"
+      ],
+      "symptoms": [
+        "door shelf retainer bar 240534901 not working",
+        "broken door shelf retainer bar 240534901"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old door shelf retainer bar 240534901 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 45.29,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.8,
+      "reviewCount": 219,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "240534901",
+      "replaces": [
+        "AP3214630"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps734935-2",
+          "title": "Great part.",
+          "body": "It fit right in. No problem.",
+          "author": "James H",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps734935-4",
+          "title": "Door shelf retainer",
+          "body": "Exactly like the broken one. Fit great",
+          "author": "Bettie L",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps734935-6",
+          "title": "Easy repair",
+          "body": "It took me 5 seconds to install the retaining bar. Perfect fit !",
+          "author": "Debra P",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/734935-1-M-Frigidaire-240534901-Door-Shelf-Retainer-Bar.jpg",
+      "videoId": "RBJ10wFvJ2M"
+    },
+    {
+      "id": "part-ps11739119",
+      "partNumber": "PS11739119",
+      "title": "Refrigerator Crisper Drawer with Humidity Control",
+      "keywords": [
+        "refrigerator",
+        "crisper",
+        "drawer",
+        "humidity",
+        "control",
+        "wp2188656"
+      ],
+      "symptoms": [
+        "drawer won't close",
+        "drawer cracked",
+        "drawer broken",
+        "drawer falls out"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) The crisper drawer (Crisper Pan, Refrigerator Crisper Drawer) with humidity control is meant to keep your vegetables and fruit as fresh as possible by allowing you to regulate the humidity levels within the drawer.\nIt attaches on the inside of your refrigerator to the bottom of the crisper shelf.\nTh\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 88.88,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.9,
+      "reviewCount": 493,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WP2188656",
+      "repairStories": [
+        {
+          "id": "story-ps11739119-2",
+          "title": "Smooth replacement",
+          "body": "Struggled far too long with broken drawer. Easy fix",
+          "author": "Brenna M",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11739119-6",
+          "title": "Quick service on replacement part",
+          "body": "Easy to find the right replacement part for my refrigerator and it was shipped promptly.",
+          "author": "Yoichi U",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11739119-1-M-Whirlpool-WP2188656-Refrigerator-Crisper-Drawer-with-Humidity-Control.jpg",
+      "videoId": "yqWpzesAc6U"
+    },
+    {
+      "id": "part-ps11739091",
+      "partNumber": "PS11739091",
+      "title": "Refrigerator Door Shelf Bin -  White",
+      "keywords": [
+        "refrigerator",
+        "door",
+        "shelf",
+        "white",
+        "wp2187172"
+      ],
+      "symptoms": [
+        "cracked door bin",
+        "broken door shelf",
+        "door bin won't stay in"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) The white refrigerator door bin is an essential component for maximizing the storage capacity of your appliance.\nMeasuring approximately 16.\n25&quot; wide, 3.\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 43.18,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.9,
+      "reviewCount": 255,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WP2187172",
+      "replaces": [
+        "AP6006028",
+        "WP2187172VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11739091-2",
+          "title": "refridgerator shelves",
+          "body": "The shelves are exactly the same as the ones that came with the refridgerator and they fit fine.",
+          "author": "Norville C",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11739091-4",
+          "title": "Garter part",
+          "body": "Very good fast service on what in stock Stella waiting on outher order",
+          "author": "Michael E",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11739091-6",
+          "title": "Helpful review",
+          "body": "Great job to all you will be ordering another shelf probably by the end of the week",
+          "author": "Scott R",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11739091-1-M-Whirlpool-WP2187172-Refrigerator-Door-Shelf-Bin-White.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps429868",
+      "partNumber": "PS429868",
+      "title": "Refrigerator Door Shelf Retainer Bin",
+      "keywords": [
+        "refrigerator",
+        "door",
+        "shelf",
+        "retainer",
+        "240337901"
+      ],
+      "symptoms": [
+        "refrigerator door shelf retainer bin 240337901 not working",
+        "broken refrigerator door shelf retainer bin 240337901"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old refrigerator door shelf retainer bin 240337901 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 56.94,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.9,
+      "reviewCount": 207,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "240337901",
+      "replaces": [
+        "AP2115858"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps429868-2",
+          "title": "Exactly what we needed",
+          "body": "Fast, perfect, exactly what we needed",
+          "author": "Gloria M",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps429868-6",
+          "title": "Easy repair, part work perfectly",
+          "body": "The part came in great condition and worked like the original",
+          "author": "David K",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/429868-1-M-Frigidaire-240337901-Refrigerator-Door-Shelf-Retainer-Bin.jpg",
+      "videoId": "nr8TPEghgjs"
+    },
+    {
+      "id": "part-ps2358880",
+      "partNumber": "PS2358880",
+      "title": "Crisper Cover Support - Front",
+      "keywords": [
+        "crisper",
+        "cover",
+        "support",
+        "front",
+        "241993101"
+      ],
+      "symptoms": [
+        "crisper cover support - front 241993101 not working",
+        "broken crisper cover support - front 241993101"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old crisper cover support - front 241993101 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 12.85,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.8,
+      "reviewCount": 85,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "241993101",
+      "replaces": [
+        "AP4427109"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps2358880-2",
+          "title": "Easy ordering and simple install",
+          "body": "Everything was just what I needed. The repair videos were helpful. The ordering process easy and the website made finding the right part simple. Thanks.",
+          "author": "Theodore K",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps2358880-4",
+          "title": "Broken part",
+          "body": "It worked like a charm. No repairman needed. Easy fix in just a few minutes.",
+          "author": "Angie I",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps2358880-6",
+          "title": "Direct replacement part",
+          "body": "Easy ordering, fast delivery, and the how to video saved time on the repair.",
+          "author": "James S",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/2358880-1-M-Frigidaire-241993101-Crisper-Cover-Support-Front.jpg",
+      "videoId": "V_QewaKvc5M"
+    },
+    {
+      "id": "part-ps429724",
+      "partNumber": "PS429724",
+      "title": "Refrigerator Door Bin",
+      "keywords": [
+        "refrigerator",
+        "door",
+        "240323001"
+      ],
+      "symptoms": [
+        "cracked door bin",
+        "broken door shelf",
+        "door bin won't stay in"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This door bin (Bottom Door Bin, Refrigerator Door Bin, Door Shelf Bin, Refrigerator Door Bin) is a movable bin mounted on the inner door to hold food items, bottles, and jars.\nOver time, a cold refrigerator can cause plastic to become fragile and break down.\nThis can lead to other issues in the refr\n3) Reconnect power and test.",
+      "applianceFamily": "refrigerator",
+      "price": 36.85,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.6,
+      "reviewCount": 245,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "240323001",
+      "replaces": [
+        "AP2115741"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps429724-2",
+          "title": "Refrigerator door shelf replacement",
+          "body": "The part was correct and the fit was exact. Parts arrived on time and in a timely matter",
+          "author": "Jeanne M",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps429724-4",
+          "title": "Great part!",
+          "body": "The part fit perfectly!",
+          "author": "MARION G",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps429724-6",
+          "title": "Great replacement part",
+          "body": "Arrived fast and fit perfectly",
+          "author": "William C",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/429724-1-M-Frigidaire-240323001-Refrigerator-Door-Bin.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps12585623",
+      "partNumber": "PS12585623",
+      "title": "Lower Spray Arm",
+      "keywords": [
+        "lower",
+        "spray",
+        "5304517203"
+      ],
+      "symptoms": [
+        "dishes not clean",
+        "spray arm broken",
+        "poor wash performance"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old lower spray arm 5304517203 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 43.18,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.7,
+      "reviewCount": 150,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "5304517203",
+      "repairStories": [
+        {
+          "id": "story-ps12585623-2",
+          "title": "No surprises",
+          "body": "Exact part, 5 minute fix, working fine",
+          "author": "RICHARD F",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps12585623-4",
+          "title": "Perfect part easy repair",
+          "body": "I got the lower spray arm fast and packaged well easy install and up and running quickly &#xA;Highly recommend",
+          "author": "James W",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps12585623-6",
+          "title": "Your instructions were great!",
+          "body": "The part was exactly what I needed. Also your instructions made everything easy!",
+          "author": "Richard B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/12585623-1-M-Frigidaire-5304517203-Lower-Spray-Arm.jpg",
+      "videoId": "HiQvsf7qtW4"
+    },
+    {
+      "id": "part-ps11756720",
+      "partNumber": "PS11756720",
+      "title": "Dishwasher Dishrack Adjuster, Right side",
+      "keywords": [
+        "dishwasher",
+        "dishrack",
+        "adjuster,",
+        "right",
+        "side",
+        "wpw10609578"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This dishrack adjuster is for dishwashers.\n&#xD;&#xA;&#xD;&#xA;Dishrack adjuster lets you change the height of the dishwasher's upper rack.\n&#xD;&#xA;&#xD;&#xA;Wear work gloves to protect your hands when installing this part.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 77.75,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 5,
+      "reviewCount": 5,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WPW10609578",
+      "replaces": [
+        "AP6023377",
+        "W10609578"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11756720-2",
+          "title": "Easy repair only took a few minutes",
+          "body": "Part looked like original . Hoping plastic lasts longer than original part! Time will tell!",
+          "author": "Shane K",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11756720-4",
+          "title": "Easy repair",
+          "body": "The problem is that the piece keeps breaking in use. This is our third replacement part for the right side and second part for the left. Wish it was stronger. I try not to move the rack up",
+          "author": "SANDRA B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11756720-6",
+          "title": "Easy to order, easy to install.",
+          "body": "The diagrams online were helpful, to ensure getting the right part. It was recieved in good time, and was easy to replace. Now my dishwasher is as good as new, and I maintained it myself!",
+          "author": "Patricia S",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11756720-1-M-Whirlpool-WPW10609578-Dishwasher-Dishrack-Adjuster-Right-side.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps3406971",
+      "partNumber": "PS3406971",
+      "title": "Lower Dishrack Wheel",
+      "keywords": [
+        "lower",
+        "dishrack",
+        "wheel",
+        "w10195416"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This OEM gray Dishwasher Lower Dishrack Wheel Assembly is a plastic kit that allows the rack to slide in and out of the dishwasher easily.\nIf it breaks or becomes damaged.\nsliding will feel difficult.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 33.69,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.8,
+      "reviewCount": 406,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10195416",
+      "replaces": [
+        "W10195416V",
+        "W10195416VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps3406971-2",
+          "title": "Fast service and perfect fit",
+          "body": "Anytime I need anything else, I will definitely order again!",
+          "author": "Deborah W",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps3406971-4",
+          "title": "Easy to repair",
+          "body": "The replacement part was shipped quickly and was very easy to replace.",
+          "author": "Steve H",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps3406971-6",
+          "title": "Easy assembly",
+          "body": "The right part and was easy to assemble.",
+          "author": "Scott D",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/3406971-1-M-Whirlpool-W10195416-Lower-Dishrack-Wheel.jpg",
+      "videoId": "fz1YHu782Wk"
+    },
+    {
+      "id": "part-ps10065979",
+      "partNumber": "PS10065979",
+      "title": "Upper Rack Adjuster Kit - White Wheels, Left and Right Sides",
+      "keywords": [
+        "upper",
+        "rack",
+        "adjuster",
+        "white",
+        "wheels,",
+        "left"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old upper rack adjuster kit - white wheels, left and right sides w10712395 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 55.29,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.7,
+      "reviewCount": 733,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10712395",
+      "replaces": [
+        "AP5957560",
+        "W10250159",
+        "W10350375",
+        "W10712395VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps10065979-2",
+          "title": "Perfect",
+          "body": "Parts as described worked better than original",
+          "author": "Robert C",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps10065979-4",
+          "title": "Improved design",
+          "body": "Improved design; more steel than plastic; good instructions on the video!",
+          "author": "John B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps10065979-6",
+          "title": "Dishwasher Rack Replacement",
+          "body": "Part received worked very well.",
+          "author": "WILBERT M",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/10065979-1-M-Whirlpool-W10712395-Upper-Rack-Adjuster-Kit-White-Wheels-Left-and-Right-Sides.jpg",
+      "videoId": "pZO1rcMwKBc"
+    },
+    {
+      "id": "part-ps11746591",
+      "partNumber": "PS11746591",
+      "title": "Dishwasher Rack Track Stop",
+      "keywords": [
+        "dishwasher",
+        "rack",
+        "track",
+        "stop",
+        "wp8565925"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) The rack track stop on your dishwasher is designed to stop the dish rack at the appropriate place when opening and closing the rack.\nIf your dishwasher is not cleaning your dishes properly, the rack stop may need to be replaced.\nThe replacement part may differ slightly from the broken part, dependin\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 9.62,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.6,
+      "reviewCount": 145,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WP8565925",
+      "replaces": [
+        "AP6013365",
+        "W10082860",
+        "W10082861",
+        "W10199682",
+        "W10508950",
+        "WP8565925VP",
+        "WPW10082861",
+        "WPW10082861VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11746591-2",
+          "title": "BACK IN BUSINESS",
+          "body": "Easy and quick installation. A little pricey for just a piece of plastic but worth it to me to get my dishwasher running. Got tired of washing by hand. Quick delivery. Very Pleased.",
+          "author": "Donald B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11746591-4",
+          "title": "Dishwasher rack stop",
+          "body": "PartSelect made it simple to identify the correct replacement part for my Whirlpool dishwasher rack stop. They provided clear instructions to complete the installation. The part is performing perfectly and the delivery was timely.",
+          "author": "James W",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11746591-6",
+          "title": "Easy replacement",
+          "body": "Very simple. Found the part on their website, ordered it. Arrived quickly, installed easily! Ta-Daa!",
+          "author": "Theresa D",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11746591-1-M-Whirlpool-WP8565925-Dishwasher-Rack-Track-Stop.jpg",
+      "videoId": "siE-8HethWg"
+    },
+    {
+      "id": "part-ps11756150",
+      "partNumber": "PS11756150",
+      "title": "Dishwasher Upper Rack Adjuster",
+      "keywords": [
+        "dishwasher",
+        "upper",
+        "rack",
+        "adjuster",
+        "wpw10546503"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This OEM Dishwasher Upper Rack Adjuster is a grayish-black, plastic part which will require a screwdriver to install.\nIt fits onto the dishwasher rack and connects it to the track allowing it to slide in and out.\nIf broken then the rack will no longer slide properly, and the part must be replaced.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 33.69,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.7,
+      "reviewCount": 163,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WPW10546503",
+      "replaces": [
+        "AP6022813",
+        "W10306646",
+        "W10418314",
+        "W10546502",
+        "W10546503",
+        "W10911100",
+        "WPW10546503VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11756150-2",
+          "title": "Easy fix!",
+          "body": "The part came quickly and was easy to install.",
+          "author": "Todd M",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11756150-4",
+          "title": "Saved me money",
+          "body": "Part was exactly as described, a perfect replacement.",
+          "author": "Dean C",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11756150-6",
+          "title": "Easy to find and install",
+          "body": "It was easy to find the part I needed and easy to install. Will use PartSelect again for my next project. Thank you.",
+          "author": "Jean K",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11756150-1-M-Whirlpool-WPW10546503-Dishwasher-Upper-Rack-Adjuster.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps11750057",
+      "partNumber": "PS11750057",
+      "title": "Lower Dishrack Wheel Assembly",
+      "keywords": [
+        "lower",
+        "dishrack",
+        "wheel",
+        "assembly",
+        "wpw10195417"
+      ],
+      "symptoms": [
+        "rack won't roll",
+        "wheels broken",
+        "rack damaged"
+      ],
+      "installSteps": "1) Disconnect power before starting.\n2) This gray plastic lower dishrack roller is a part for your dishwasher.\nIt attaches to the bottom of the lower dishrack, allowing it to move in and out smoothly.\nIf the lower dishrack stops moving in and out easily or preventing you from being able to shut the dishwasher door, inspect the dishrack ro\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 48.45,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.7,
+      "reviewCount": 144,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WPW10195417",
+      "replaces": [
+        "AP6016764",
+        "W10195417",
+        "WPW10195417VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps11750057-2",
+          "title": "Perfect",
+          "body": "Worked perfectly ... snaps right in ... very easy.",
+          "author": "Charlie V",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11750057-4",
+          "title": "Easy repair",
+          "body": "Part is brand new, easy replacement, works like new",
+          "author": "Scott W D",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps11750057-6",
+          "title": "Prompt Service",
+          "body": "The part arrived promptly and installation was easy.",
+          "author": "Terry L",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/11750057-1-M-Whirlpool-WPW10195417-Lower-Dishrack-Wheel-Assembly.jpg",
+      "videoId": "d6AvOkulk_g"
+    },
+    {
+      "id": "part-ps8260087",
+      "partNumber": "PS8260087",
+      "title": "Dishwasher Heating Element",
+      "keywords": [
+        "dishwasher",
+        "heating",
+        "element",
+        "w10518394"
+      ],
+      "symptoms": [
+        "dishwasher heating element w10518394 not working",
+        "broken dishwasher heating element w10518394"
+      ],
+      "installSteps": "1) Disconnect power.\n2) Remove the old dishwasher heating element w10518394 and install the replacement.\n3) Reconnect power and test.",
+      "applianceFamily": "dishwasher",
+      "price": 46.34,
+      "currency": "USD",
+      "inStock": true,
+      "rating": 4.5,
+      "reviewCount": 114,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10518394",
+      "replaces": [
+        "AP5690151",
+        "W10518394",
+        "W10134009",
+        "W10441445",
+        "W10518394VP"
+      ],
+      "repairStories": [
+        {
+          "id": "story-ps8260087-2",
+          "title": "Easy repair",
+          "body": "Used video and written directions to change out. Very clear and easy to follow.",
+          "author": "Emma B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps8260087-4",
+          "title": "why is this PART so difficult to get?",
+          "body": "my dishwasher heating element went bad in late OCT 2020. we thought we could get this fixed reasonably quickly... but low and behold, everyone had this part on back order.. &#xA;&#xA;i ordered the part, paid more for it thru Partselect, but it was the correct part. and the appliance repair man was able to replace with little effort. &#xA;&#xA;the Biggest effort was FINDING this part in Stock. &#xA;4 stars because i wish the price was in line with other suppliers... but PartSelect did have the part! so they get a 5. &#xA;&#xA;marianne",
+          "author": "Marianne G",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        },
+        {
+          "id": "story-ps8260087-6",
+          "title": "Great Part! Worked perfectly",
+          "body": "It was exactly what we needed to fix our dishwasher! Thanks a lot",
+          "author": "Tiffany B",
+          "helpfulYes": 0,
+          "helpfulTotal": 0
+        }
+      ],
+      "imageUrl": "https://partselectcom-gtcdcddbene3cpes.z01.azurefd.net/8260087-1-M-Whirlpool-W10518394-Dishwasher-Heating-Element.jpg",
+      "videoId": "Co8dQ7rzTMQ"
     }
   ],
   "compatibilities": [
@@ -365,12 +1294,30 @@
         "Hold the dispenser lever for 10–15 seconds: if you hear the valve open (a click or hum) but nothing flows, the water inlet valve (PS734936) is likely faulty.",
         "If no click at all, check the door switch — the dispenser won't activate unless the fridge door is fully closed."
       ],
-      "matchIncludesAll": ["water dispenser"],
-      "matchFlexible": [
-        ["water dispenser", "water", "dispenser"],
-        ["not working", "no water", "stopped", "won't", "wont", "doesn't work", "not dispensing", "not coming out", "broken"]
+      "matchIncludesAll": [
+        "water dispenser"
       ],
-      "likelyParts": ["PS734936"],
+      "matchFlexible": [
+        [
+          "water dispenser",
+          "water",
+          "dispenser"
+        ],
+        [
+          "not working",
+          "no water",
+          "stopped",
+          "won't",
+          "wont",
+          "doesn't work",
+          "not dispensing",
+          "not coming out",
+          "broken"
+        ]
+      ],
+      "likelyParts": [
+        "PS734936"
+      ],
       "commonQuestions": [
         {
           "id": "qa-guide-water-1",
@@ -395,12 +1342,27 @@
         "Reset the dishwasher by cutting power at the breaker for 60 seconds, then restore and try a new cycle.",
         "If the door clicks but the dishwasher still won't start, the door latch assembly (PS11746240) is likely faulty and needs replacement."
       ],
-      "matchIncludesAll": ["dishwasher"],
-      "matchFlexible": [
-        ["won't start", "wont start", "not starting", "doesn't start", "no power", "won't turn on", "dead"],
-        ["dishwasher", "washer"]
+      "matchIncludesAll": [
+        "dishwasher"
       ],
-      "likelyParts": ["PS11746240"],
+      "matchFlexible": [
+        [
+          "won't start",
+          "wont start",
+          "not starting",
+          "doesn't start",
+          "no power",
+          "won't turn on",
+          "dead"
+        ],
+        [
+          "dishwasher",
+          "washer"
+        ]
+      ],
+      "likelyParts": [
+        "PS11746240"
+      ],
       "commonQuestions": [
         {
           "id": "qa-guide-dishwasher-1",
@@ -424,12 +1386,35 @@
         "Check the water supply valve behind the fridge and the fill tube for ice blockage.",
         "If still no ice, note any blinking pattern on the ice maker module (service manual) before replacing the ice maker assembly."
       ],
-      "matchIncludesAll": ["ice maker"],
-      "matchFlexible": [
-        ["ice maker", "icemaker", "ice-maker", "ice"],
-        ["not working", "broken", "no ice", "not making ice", "not making", "stopped making", "fix", "stopped", "won't", "wont", "doesn't work", "doesnt work"]
+      "matchIncludesAll": [
+        "ice maker"
       ],
-      "likelyParts": ["PS11738120", "PS734936"],
+      "matchFlexible": [
+        [
+          "ice maker",
+          "icemaker",
+          "ice-maker",
+          "ice"
+        ],
+        [
+          "not working",
+          "broken",
+          "no ice",
+          "not making ice",
+          "not making",
+          "stopped making",
+          "fix",
+          "stopped",
+          "won't",
+          "wont",
+          "doesn't work",
+          "doesnt work"
+        ]
+      ],
+      "likelyParts": [
+        "PS11738120",
+        "PS734936"
+      ],
       "commonQuestions": [
         {
           "id": "qa-guide-icemaker-1",

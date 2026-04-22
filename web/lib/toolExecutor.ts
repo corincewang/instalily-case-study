@@ -5,6 +5,7 @@ import {
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
   SEARCH_BY_SYMPTOM_TOOL_NAME,
+  SEMANTIC_SEARCH_TOOL_NAME,
   type ToolName,
   type ToolTraceEntry,
 } from "./agentTools";
@@ -117,6 +118,10 @@ export function executePartselectTool(
       }
       return { name: SEARCH_BY_SYMPTOM_TOOL_NAME, ok: true, output: searchBySymptomTool({ symptom: raw }) };
     }
+    // semantic_search is async — caller must handle it separately (like fetch_part_page).
+    // If somehow called here synchronously, return a graceful no-op.
+    case SEMANTIC_SEARCH_TOOL_NAME:
+      return fail(SEMANTIC_SEARCH_TOOL_NAME, "use_async_path");
     default:
       return fail(name as ToolName, "unknown_tool", { name });
   }

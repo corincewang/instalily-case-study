@@ -7,6 +7,7 @@ import {
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
   SEARCH_BY_SYMPTOM_TOOL_NAME,
+  SEMANTIC_SEARCH_TOOL_NAME,
 } from "../agentTools";
 
 export const PARTSELECT_OPENAI_TOOLS: ChatCompletionTool[] = [
@@ -139,6 +140,27 @@ export const PARTSELECT_OPENAI_TOOLS: ChatCompletionTool[] = [
           },
         },
         required: ["part_number"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: SEMANTIC_SEARCH_TOOL_NAME,
+      description:
+        "Semantic search over customer repair stories and FAQ answers using vector similarity. " +
+        "Use this when the user asks experience-based questions like 'is this easy to install?', " +
+        "'how long does it take?', 'has anyone installed this on a Kenmore?', or " +
+        "'what tools do I need?'. Returns the most relevant real customer excerpts to cite.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "A natural-language question or phrase to search for, e.g. 'how hard is it to install PS11752778'",
+          },
+        },
+        required: ["query"],
       },
     },
   },
