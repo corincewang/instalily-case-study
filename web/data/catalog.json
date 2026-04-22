@@ -1343,7 +1343,8 @@
         "If the door clicks but the dishwasher still won't start, the door latch assembly (PS11746240) is likely faulty and needs replacement."
       ],
       "matchIncludesAll": [
-        "dishwasher"
+        "dishwasher",
+        "start"
       ],
       "matchFlexible": [
         [

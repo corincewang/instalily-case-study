@@ -1,3 +1,4 @@
+import { isVaguePartsShoppingOpener } from "./buildChatBlocks";
 import { retrieveExact } from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
@@ -26,9 +27,11 @@ export function formatCatalogReplyFromRetrieval(
 ): string {
   const { part, compatibility, guide, candidates } = retrieval;
 
-  // Clarify — no data at all
-  if (clarifyQuestion && !part && !compatibility && !guide) {
-    return clarifyQuestion;
+  // Clarify / vague opener wins over a spurious `part` from tool noise (e.g. LLM catalog_search).
+  if (clarifyQuestion?.trim()) {
+    if (isVaguePartsShoppingOpener(userPreview) || (!part && !compatibility && !guide)) {
+      return clarifyQuestion;
+    }
   }
 
   // Complete miss

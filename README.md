@@ -116,7 +116,7 @@ JSON { reply, blocks, citations, suggested_actions, tool_trace, used_llm }
 1. The LLM never invents product facts — retrieval is the source of truth.
 2. The system works end-to-end without an API key (deterministic path passes all golden tests).
 
-**Live fetch fallback:** For any PS number not in the local catalog, `fetch_part_page` fetches the real PartSelect product page via [Jina.ai](https://jina.ai) and returns price, stock, and description. The local catalog acts as a rich cache for the 4 demo parts; the live tool makes the agent answer-capable across PartSelect's full catalog.
+**Live fetch fallback:** For any PS number not in the local catalog, `fetch_part_page` fetches the real PartSelect product page via [Jina.ai](https://jina.ai) and returns price, stock, and description. The local catalog acts as a rich cache for a small set of seed parts; the live tool makes the agent answer-capable across PartSelect's full catalog.
 
 ---
 

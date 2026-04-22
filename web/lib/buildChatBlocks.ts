@@ -118,6 +118,12 @@ export function classifyIntent(userMessage: string): ChatIntent {
   ) {
     return "oem";
   }
+  // Compatibility / fit — before `diagnose` so "… part for my model …" is not stolen by
+  // the `parts? … for` diagnose pattern, and so "compatible … dishwasher …" wins over
+  // symptom-style "parts for …" phrasing.
+  if (/\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/.test(m)) {
+    return "compat";
+  }
   // Reverse diagnosis intent: "what parts do I need for X", "which part(s) to replace"…
   // Checked before `install` (shares "replace" family) and before `repair` (shares symptom words).
   if (
@@ -133,9 +139,6 @@ export function classifyIntent(userMessage: string): ChatIntent {
     )
   ) {
     return "install";
-  }
-  if (/\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/.test(m)) {
-    return "compat";
   }
   if (
     /\b(not working|won'?t|doesn'?t|broken|leak|leaking|fix|repair|troubleshoot|no ice|stopped|makes noise|grinding|clogged)\b/.test(
@@ -153,12 +156,14 @@ export function classifyIntent(userMessage: string): ChatIntent {
   }
   // Category 4 browse: "show me X parts", "list dishwasher parts", "find a wheel".
   // Placed after the task intents above so "how do I install" / "is it compatible" win.
+  // Exclude bare "find a part" / "I want to find a part" — no catalog anchor yet (→ generic).
   if (
-    /\b(show me|show us|browse)\b/.test(m) ||
-    /\blist\s+(all|me|the|every|our)?\s*(dishwasher|refrigerator|fridge)?\s*parts?\b/.test(m) ||
-    /\bfind\s+(a|an|the|all|some|me|any)\b/.test(m) ||
-    /\bparts?\s+(for|list|catalog)\b/.test(m) ||
-    /\b(dishwasher|refrigerator|fridge)\s+parts?\b/.test(m)
+    !isVaguePartsShoppingOpener(userMessage) &&
+    (/\b(show me|show us|browse)\b/.test(m) ||
+      /\blist\s+(all|me|the|every|our)?\s*(dishwasher|refrigerator|fridge)?\s*parts?\b/.test(m) ||
+      /\bfind\s+(a|an|the|all|some|me|any)\b/.test(m) ||
+      /\bparts?\s+(for|list|catalog)\b/.test(m) ||
+      /\b(dishwasher|refrigerator|fridge)\s+parts?\b/.test(m))
   ) {
     return "search";
   }
@@ -335,8 +340,8 @@ function buildCompatSupportBlock(
     title: "Compatibility check",
     subtitle: `Model ${compat.model} · Part ${compat.partNumber}`,
     verdict: compat.compatible
-      ? { label: "Compatible (demo data)", tone: "ok" }
-      : { label: "Not compatible (demo data)", tone: "warn" },
+      ? { label: "Compatible", tone: "ok" }
+      : { label: "Not compatible", tone: "warn" },
     note: truncate(compat.note, 280),
   };
 }
@@ -450,6 +455,18 @@ function hasPartSignal(userMessage: string, r: Retrieval): boolean {
   return PS_TOKEN_RE.test(userMessage) || OEM_TOKEN_RE.test(userMessage);
 }
 
+/**
+ * For compatibility UX only: session `r.part` may come from welcome text / prior turns.
+ * "This/that part" + model must not reuse that PS until the user types a PS/OEM or a
+ * non-deictic description that actually resolved `r.part` from *this* message.
+ */
+function userAnchoredCompatPart(userMessage: string, r: Retrieval): boolean {
+  if (PS_TOKEN_RE.test(userMessage) || OEM_TOKEN_RE.test(userMessage)) return true;
+  if (/\b(this|that)\s+part\b/i.test(userMessage)) return false;
+  if (/\bis\s+it\s+compatible\b/i.test(userMessage)) return false;
+  return hasPartSignal(userMessage, r);
+}
+
 function hasModelSignal(userMessage: string, r: Retrieval): boolean {
   if (r.compatibility) return true;
   // Strip any PS# first so "PS11752778" doesn't masquerade as a model.
@@ -460,6 +477,118 @@ function hasModelSignal(userMessage: string, r: Retrieval): boolean {
 function hasBrandSignal(userMessage: string): boolean {
   const m = userMessage.toLowerCase();
   return KNOWN_BRANDS.some((b) => m.includes(b));
+}
+
+const MODELISH_RE = /\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/gi;
+
+/**
+ * True when the user has only opened the conversation ("find a part") and has not
+ * given a PS number, model, appliance, symptom, brand, or a specific part description.
+ * Prevents a stray retrieval / LLM tool hit from rendering an arbitrary product card.
+ */
+export function isVaguePartsShoppingOpener(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (t.length === 0) return true;
+  if (/\bPS\d{5,}\b/i.test(t)) return false;
+  for (const m of t.toUpperCase().matchAll(MODELISH_RE)) {
+    if (!m[1].startsWith("PS")) return false;
+  }
+  const low = t.toLowerCase();
+  if (
+    /\b(refrigerators?|fridges?|dishwashers?|ice\s*makers?|water\s*dispensers?|water\s*filters?)\b/.test(
+      low
+    ) ||
+    KNOWN_BRANDS.some((b) => low.includes(b))
+  ) {
+    return false;
+  }
+
+  if (/\bfind\s+(a|an|the|some|any)\s+parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  if (/\bfind\s+(me|us)\s+(a|an|the|some)\s+parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  if (/\b(?:want|need)\s+to\s+find\s+(a|an|the|some)\s+parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  if (/^(?:i\s+)?(?:want|need)\s+to\s+find\s+(a|an|the|some)\s+parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  if (/\blooking\s+for\s+(a|an|the|some)\s+parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  if (/^help\s+me\s+find\s+(?:a\s+)?parts?\s*[.?!…]*\s*$/i.test(low)) return true;
+  return false;
+}
+
+/**
+ * Pure greeting / thanks / ack with no PS#, model token, appliance, or part keywords.
+ * Used to (1) drop session context for retrieval and (2) skip structured cards.
+ */
+export function conversationOnlyResponse(userMessage: string): { reply: string } | null {
+  const t = userMessage.trim();
+  if (t.length < 1 || t.length > 160) return null;
+  if (/\bPS\d{5,}\b/i.test(t)) return null;
+  for (const m of t.toUpperCase().matchAll(MODELISH_RE)) {
+    if (!m[1].startsWith("PS")) return null;
+  }
+  const low = t.toLowerCase();
+  if (
+    /\b(refrigerat|fridge|dishwasher|ice\s*maker|water\s*dispenser|install|compat|part\s*number|symptom|leak|broken|fix|repair|partselect)\b/.test(
+      low
+    ) ||
+    KNOWN_BRANDS.some((b) => low.includes(b))
+  ) {
+    return null;
+  }
+
+  if (/^good\s+morning\b[\s!.…]*$/i.test(low)) {
+    return {
+      reply:
+        "Good morning! How can I help with your refrigerator or dishwasher today?",
+    };
+  }
+  if (/^good\s+afternoon\b[\s!.…]*$/i.test(low)) {
+    return { reply: "Good afternoon! What can I look up for your fridge or dishwasher?" };
+  }
+  if (/^good\s+evening\b[\s!.…]*$/i.test(low) || /^good\s+night\b[\s!.…]*$/i.test(low)) {
+    return {
+      reply:
+        "Good evening! Share a model number, a PS part number, or describe what's going wrong and I'll help.",
+    };
+  }
+  if (/^(?:hi|hello|hey|gm)\b[\s!.…]*$/i.test(low)) {
+    return {
+      reply:
+        "Hi! Tell me a PS part number, your appliance model, or what's broken — I'll help you find the right refrigerator or dishwasher part.",
+    };
+  }
+  if (/^(?:thanks?|thank\s+you|thx|ty)\b[\s!.…]*$/i.test(low)) {
+    return { reply: "You're welcome — happy to help if anything else comes up." };
+  }
+  if (/^(?:bye|goodbye)\b[\s!.…]*$/i.test(low)) {
+    return { reply: "Take care — reach out anytime you need a part." };
+  }
+  if (
+    /^(?:ok+|okay|yes|no|sure|yep|nope|got\s+it|sounds\s+good|cheers|appreciate\s+it)\b[\s!.…]*$/i.test(
+      low
+    )
+  ) {
+    return {
+      reply:
+        "Sounds good — let me know when you're ready to look up a part or check a model.",
+    };
+  }
+  return null;
+}
+
+export function isConversationOnlyTurn(userMessage: string): boolean {
+  return conversationOnlyResponse(userMessage) !== null;
+}
+
+/** Enough symptom + appliance wording that asking for "more detail" would read wrong. */
+function hasStrongRepairSymptom(userMessage: string): boolean {
+  const m = userMessage.toLowerCase();
+  if (/\b(ice\s*maker|icemaker|ice-maker)\b/.test(m)) return true;
+  if (/\b(no ice|not making ice)\b/.test(m)) return true;
+  if (/\bwater\s+dispenser\b/.test(m)) return true;
+  return (
+    /\b(dishwasher|fridge|refrigerator)\b/.test(m) &&
+    /\b(not working|won'?t|wont|doesn'?t|broken|leak|leaking|start|drain|fix|repair|stopped)\b/.test(
+      m
+    )
+  );
 }
 
 export function detectClarification(
@@ -475,7 +604,7 @@ export function detectClarification(
   }
   switch (intent) {
     case "compat": {
-      const hasPart = hasPartSignal(userMessage, r);
+      const hasPart = userAnchoredCompatPart(userMessage, r);
       const hasModel = hasModelSignal(userMessage, r);
       if (hasPart && hasModel) return null; // retrieval couldn't match — that's a different failure, not a clarify.
       if (!hasPart && !hasModel) {
@@ -542,20 +671,26 @@ export function detectClarification(
     case "repair": {
       if (r.guide) return null;
       const needsBrand = !hasBrandSignal(userMessage);
+      // Brand + clear symptom but no guide row — don't gaslight with "be more specific".
+      if (!needsBrand && hasStrongRepairSymptom(userMessage)) return null;
       return {
         reason: "need_brand_topic",
         title: "Need more detail to troubleshoot",
         subtitle: "For repair guides",
         question: needsBrand
           ? "Which brand of fridge or dishwasher, and what exactly is going wrong? I need the brand plus a specific symptom to pull the right repair guide."
-          : "What exactly is going wrong? A more specific symptom (e.g. 'ice maker not working', 'won't drain') helps me pull the right repair guide.",
+          : "I couldn't match a repair guide to those exact words in the catalog. Try a short symptom phrase (e.g. ice maker not making ice, water dispenser dead, dishwasher won't start) or tap an example below.",
         hints: [
           "Example: Whirlpool refrigerator ice maker not working",
-          "Example: KitchenAid dishwasher won't start",
+          "Example: Whirlpool dishwasher won't start",
         ],
       };
     }
     case "diagnose": {
+      // If we already matched a repair guide or a compatibility row, don't stack a
+      // "describe your symptom" clarify — that produces misleading chips (e.g. fridge
+      // ice/dispenser examples) next to a dishwasher repair card.
+      if (r.guide || r.compatibility) return null;
       if (r.candidates && r.candidates.length > 0) return null;
       return {
         reason: "need_symptom",
@@ -750,6 +885,18 @@ export function buildClarifyReplyFromRetrieval(
   r: Retrieval,
   userMessage: string
 ): { reply: string; hints: string[] } | null {
+  if (isConversationOnlyTurn(userMessage)) return null;
+  if (isVaguePartsShoppingOpener(userMessage)) {
+    return {
+      reply:
+        "Sure — tell me the refrigerator or dishwasher model number, or the part number if you have it, and I'll help find the right part.",
+      hints: [
+        "Find part PS11752778",
+        "Is PS11752778 compatible with WDT780SAEM1?",
+        "The ice maker on my Whirlpool fridge is not working",
+      ],
+    };
+  }
   const intent = classifyIntent(userMessage);
   // `generic` never clarifies — keeps garbage input as honest no_evidence.
   if (intent === "generic") return null;
@@ -782,21 +929,26 @@ export function buildBlocksFromRetrieval(
   r: Retrieval,
   userMessage = ""
 ): ChatBlock[] {
+  if (isConversationOnlyTurn(userMessage)) return [];
+
   const intent = classifyIntent(userMessage);
+  const vagueOpener = isVaguePartsShoppingOpener(userMessage);
   const blocks: ChatBlock[] = [];
 
   switch (intent) {
     case "buy":
-      if (r.part) blocks.push(buildProductBlock(r.part));
+      if (!vagueOpener && r.part) blocks.push(buildProductBlock(r.part));
       break;
     case "oem":
-      if (r.part) blocks.push(buildProductBlock(r.part));
+      if (!vagueOpener && r.part) blocks.push(buildProductBlock(r.part));
       break;
     case "install":
       if (r.part) blocks.push(buildInstallSupportBlock(r.part));
       break;
     case "compat":
-      if (r.compatibility) blocks.push(buildCompatSupportBlock(r.compatibility));
+      if (r.compatibility && !detectClarification(userMessage, r, "compat")) {
+        blocks.push(buildCompatSupportBlock(r.compatibility));
+      }
       break;
     case "repair":
     case "diagnose":
@@ -810,10 +962,12 @@ export function buildBlocksFromRetrieval(
     case "search":
       // ≥2 hits → multi-result list card; exactly 1 → fall through to a product card
       // (same UX as "Find a lower rack wheel" today); 0 → no block.
-      if (r.searchResults && r.searchResults.length >= 2) {
-        blocks.push(buildSearchSupportBlock(r.searchResults));
-      } else if (r.part) {
-        blocks.push(buildProductBlock(r.part));
+      if (!vagueOpener) {
+        if (r.searchResults && r.searchResults.length >= 2) {
+          blocks.push(buildSearchSupportBlock(r.searchResults));
+        } else if (r.part) {
+          blocks.push(buildProductBlock(r.part));
+        }
       }
       break;
     case "generic":
@@ -822,9 +976,9 @@ export function buildBlocksFromRetrieval(
       // just a model number after a clarify turn that already knew the part),
       // show the compat card — it's the most specific answer we have.
       // Otherwise fall back to a product card if a part is known.
-      if (r.compatibility) {
+      if (r.compatibility && !detectClarification(userMessage, r, "compat")) {
         blocks.push(buildCompatSupportBlock(r.compatibility));
-      } else if (r.part) {
+      } else if (!vagueOpener && r.part) {
         blocks.push(buildProductBlock(r.part));
       }
       break;
@@ -864,6 +1018,22 @@ export function buildSuggestedActionsFromRetrieval(
     });
     return out.slice(0, 5);
   }
+
+  if (isConversationOnlyTurn(userMessage)) {
+    push({ id: "co-find", label: "Find part by PS", prompt: "Find part PS11752778" });
+    push({
+      id: "co-compat",
+      label: "Check compatibility",
+      prompt: "Is PS11752778 compatible with WRS325SDHZ?",
+    });
+    push({
+      id: "co-symptom",
+      label: "Ice maker not working",
+      prompt: "The ice maker on my Whirlpool fridge is not working. How can I fix it?",
+    });
+    return out.slice(0, 6);
+  }
+
   const clar = buildClarifyReplyFromRetrieval(r, userMessage);
   if (clar) {
     clar.hints.forEach((h, i) => {
@@ -908,80 +1078,87 @@ export function buildSuggestedActionsFromRetrieval(
       // that read like upsell rather than a natural continuation of the install answer.
       break;
     case "compat":
-      if (r.compatibility && pn) {
-        if (!r.compatibility.compatible) {
-          // Do not offer install / buy for a known bad part–model pair.
-          push({
-            id: "find-right-part",
-            label: "Find the right part",
-            prompt: `Help me find the correct refrigerator or dishwasher part for model ${r.compatibility.model}`,
-          });
-        } else {
-          push({
-            id: "install",
-            label: "Install",
-            prompt: `How do I install ${pn}?`,
-          });
-          push({
-            id: "price-stock",
-            label: "Price & stock",
-            prompt: `How much is ${pn} and is it in stock?`,
-          });
-        }
+      // Incompatible PS↔model: no chips (no symptom yet; install/price would mislead).
+      if (r.compatibility && pn && r.compatibility.compatible) {
+        push({
+          id: "install",
+          label: "Install",
+          prompt: `How do I install ${pn}?`,
+        });
+        push({
+          id: "price-stock",
+          label: "Price & stock",
+          prompt: `How much is ${pn} and is it in stock?`,
+        });
       }
       break;
     case "repair":
       if (r.guide) {
-        push({
-          id: "related-parts",
-          label: "Related parts",
-          prompt: `What parts are needed to fix ${r.guide.brand} ${r.guide.appliance} ${r.guide.topic}?`,
-        });
-        // Only add part-specific pivots when we already surfaced candidate parts —
-        // generic "installation help" is a weak match to a repair-troubleshooting reply.
-        if (r.candidates && r.candidates.length > 0) {
-          const top = r.candidates[0].part.partNumber;
+        const c = r.candidates;
+        if (c && c.length > 0) {
+          for (const row of c) {
+            const ps = row.part.partNumber;
+            push({
+              id: `price-stock-${ps}`,
+              label: `Price & stock (${ps})`,
+              prompt: `How much is ${ps} and is it in stock?`,
+            });
+          }
+          if (c.length === 1) {
+            const only = c[0].part.partNumber;
+            push({
+              id: `check-fit-${only}`,
+              label: `Check fit (${only})`,
+              prompt: `Is ${only} compatible with my model?`,
+            });
+          }
+        } else {
           push({
-            id: "price-stock-top",
-            label: `Price & stock (${top})`,
-            prompt: `How much is ${top} and is it in stock?`,
-          });
-          push({
-            id: "check-fit-top",
-            label: `Check fit (${top})`,
-            prompt: `Is ${top} compatible with my model?`,
+            id: "related-parts",
+            label: "Related parts",
+            prompt: `What parts are needed to fix ${r.guide.brand} ${r.guide.appliance} ${r.guide.topic}?`,
           });
         }
       }
       break;
     case "diagnose":
       if (r.candidates && r.candidates.length > 0) {
-        const top = r.candidates[0].part.partNumber;
-        push({
-          id: "price-stock-top",
-          label: `Price & stock (${top})`,
-          prompt: `How much is ${top} and is it in stock?`,
-        });
-        push({
-          id: "check-fit-top",
-          label: `Check fit (${top})`,
-          prompt: `Is ${top} compatible with my model?`,
-        });
+        for (const row of r.candidates) {
+          const ps = row.part.partNumber;
+          push({
+            id: `price-stock-${ps}`,
+            label: `Price & stock (${ps})`,
+            prompt: `How much is ${ps} and is it in stock?`,
+          });
+        }
+        if (r.candidates.length === 1) {
+          const only = r.candidates[0].part.partNumber;
+          push({
+            id: `check-fit-${only}`,
+            label: `Check fit (${only})`,
+            prompt: `Is ${only} compatible with my model?`,
+          });
+        }
       }
       break;
     case "search":
       if (r.searchResults && r.searchResults.length > 0) {
-        const top = r.searchResults[0].part.partNumber;
-        push({
-          id: "price-stock-top",
-          label: `Price & stock (${top})`,
-          prompt: `How much is ${top} and is it in stock?`,
-        });
-        push({
-          id: "check-fit-top",
-          label: `Check fit (${top})`,
-          prompt: `Is ${top} compatible with my model?`,
-        });
+        for (const hit of r.searchResults) {
+          const ps = hit.part.partNumber;
+          push({
+            id: `price-stock-${ps}`,
+            label: `Price & stock (${ps})`,
+            prompt: `How much is ${ps} and is it in stock?`,
+          });
+        }
+        if (r.searchResults.length === 1) {
+          const only = r.searchResults[0].part.partNumber;
+          push({
+            id: `check-fit-${only}`,
+            label: `Check fit (${only})`,
+            prompt: `Is ${only} compatible with my model?`,
+          });
+        }
       } else if (pn) {
         push({
           id: "price-stock",
@@ -1012,7 +1189,6 @@ export function buildSuggestedActionsFromRetrieval(
       break;
   }
 
-  // Keep follow-up chips sparse: only high-confidence pivots from the switch above
-  // (plus OOS/clarify example prompts). No blanket "Speak to an agent" on every hit.
-  return out.slice(0, 3);
+  // Cap chip count; allow one row per catalog hit (up to 3) plus optional single check-fit.
+  return out.slice(0, 6);
 }

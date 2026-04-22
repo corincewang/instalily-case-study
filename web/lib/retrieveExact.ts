@@ -333,6 +333,22 @@ export function retrieveExact(
     });
   }
 
+  // A compatibility verdict answers a different question than a symptom repair guide.
+  // LLM `catalog_search` queries often echo extra tokens and could attach an unrelated guide.
+  // Only strip `guide` when THIS turn reads like a fit check — not when `compatibility` was
+  // resolved solely from session context while the user is asking a new symptom question.
+  if (compatibility && guide) {
+    const userLooksCompat = /\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/i.test(
+      hay
+    );
+    if (userLooksCompat) {
+      guide = undefined;
+      for (let i = citations.length - 1; i >= 0; i--) {
+        if (citations[i].source === "repair_guide") citations.splice(i, 1);
+      }
+    }
+  }
+
   return {
     citations,
     part,

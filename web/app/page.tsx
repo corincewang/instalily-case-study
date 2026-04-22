@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { partSelectProductPageUrl } from "@/lib/partselectUrls";
+
 // ─── API types ────────────────────────────────────────────────────────────────
 
 type Citation = { id: string; source: string; label: string };
@@ -132,6 +134,39 @@ function usePartMedia(partNumber: string) {
   return media;
 }
 
+/** Cart row thumbnail — same `/api/part-image` source as product cards. */
+function CartLineThumb({ partNumber, title }: { partNumber: string; title: string }) {
+  const { imageUrl } = usePartMedia(partNumber);
+  return (
+    <div className="flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={title}
+          className="h-full w-full object-contain p-0.5"
+          loading="lazy"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-[#337788]/10">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="h-5 w-5 animate-pulse text-[#337788]/40"
+            aria-hidden
+          >
+            <path
+              fillRule="evenodd"
+              d="M12 6.75a5.25 5.25 0 0 1 6.775-5.025.75.75 0 0 1 .313 1.248l-3.32 3.319c.063.475.276.934.641 1.299.365.365.824.578 1.3.641l3.318-3.319a.75.75 0 0 1 1.248.313 5.25 5.25 0 0 1-5.472 6.756c-1.018-.086-1.87.1-2.309.634L7.344 21.3A3.298 3.298 0 1 1 2.7 16.657l8.684-7.151c.533-.44.72-1.291.634-2.309A5.342 5.342 0 0 1 12 6.75ZM4.117 19.125a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Product block card ───────────────────────────────────────────────────────
 
 function ProductCard({ block, onAddToCart }: { block: ProductBlock; onAddToCart?: () => void }) {
@@ -217,26 +252,22 @@ function ProductCard({ block, onAddToCart }: { block: ProductBlock; onAddToCart?
               Add to cart
             </button>
           )}
-          {(() => {
-            const ps = block.partNumber.replace(/^PS/i, "");
-            const hasSlug = block.manufacturer && block.manufacturerPartNumber;
-            const href = hasSlug
-              ? `https://www.partselect.com/PS${ps}-${block.manufacturer!.replace(/\s+/g, "-")}-${block.manufacturerPartNumber!.replace(/\s+/g, "-")}-${block.title.replace(/\s+/g, "-")}.htm`
-              : `https://www.partselect.com/PS${ps}-.htm`;
-            return (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/30 hover:bg-white/25 transition-colors"
-              >
-                View on PartSelect
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 opacity-75">
-                  <path fillRule="evenodd" d="M4.22 11.78a.75.75 0 0 1 0-1.06l5.25-5.25H6.75a.75.75 0 0 1 0-1.5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0V6.53l-5.25 5.25a.75.75 0 0 1-1.06 0Z" clipRule="evenodd" />
-                </svg>
-              </a>
-            );
-          })()}
+          <a
+            href={partSelectProductPageUrl({
+              partNumber: block.partNumber,
+              title: block.title,
+              manufacturer: block.manufacturer,
+              manufacturerPartNumber: block.manufacturerPartNumber,
+            })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-[11px] font-semibold text-white ring-1 ring-white/30 hover:bg-white/25 transition-colors"
+          >
+            View on PartSelect
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3 opacity-75">
+              <path fillRule="evenodd" d="M4.22 11.78a.75.75 0 0 1 0-1.06l5.25-5.25H6.75a.75.75 0 0 1 0-1.5h4.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0V6.53l-5.25 5.25a.75.75 0 0 1-1.06 0Z" clipRule="evenodd" />
+            </svg>
+          </a>
         </div>
     </div>
   );
@@ -449,7 +480,7 @@ function BlockCard({ block, onAddToCart }: { block: ChatBlock; onAddToCart?: () 
 
 const QUICK_ACTIONS = [
   { label: "How do I install PS11752778?",              text: "How can I install part number PS11752778?" },
-  { label: "Is PS11752778 compatible with WDT780SAEM1?", text: "Is this part compatible with my WDT780SAEM1 model?" },
+  { label: "Is PS11752778 compatible with WDT780SAEM1?", text: "Is PS11752778 compatible with my WDT780SAEM1 model?" },
   { label: "Ice maker not working",                     text: "The ice maker on my Whirlpool fridge is not working. How can I fix it?" },
   { label: "Find a part",                               text: "I want to find a part" },
 ] as const;
@@ -458,6 +489,7 @@ const QUICK_ACTIONS = [
 
 // ─── Cart types ───────────────────────────────────────────────────────────────
 
+/** Local demo cart only — not synced with PartSelect.com. */
 type CartItem = {
   id: string;
   partNumber: string;
@@ -487,17 +519,15 @@ function CartContents({
               <path d="M2.25 2.25a.75.75 0 0 0 0 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 0 0-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 0 0 0-1.5H5.378A2.25 2.25 0 0 1 7.5 15h11.218a.75.75 0 0 0 .674-.421 60.358 60.358 0 0 0 2.96-7.228.75.75 0 0 0-.525-.965A60.864 60.864 0 0 0 5.68 4.509l-.232-.867A1.875 1.875 0 0 0 3.636 2.25H2.25ZM3.75 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM16.5 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" />
             </svg>
             <p className="text-sm">Your cart is empty</p>
-            <p className="text-xs text-zinc-400">Add parts from product cards in the chat</p>
+            <p className="max-w-56 text-xs text-zinc-400">
+              Use <span className="font-medium text-zinc-500">Add to cart</span> on a product card to build a demo order here.
+            </p>
           </div>
         ) : (
           <ul className="divide-y divide-zinc-100">
             {items.map((item) => (
               <li key={item.id} className="flex items-start gap-3 px-4 py-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#337788]/10">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-[#337788]">
-                    <path fillRule="evenodd" d="M12 6.75a5.25 5.25 0 0 1 6.775-5.025.75.75 0 0 1 .313 1.248l-3.32 3.319c.063.475.276.934.641 1.299.365.365.824.578 1.3.641l3.318-3.319a.75.75 0 0 1 1.248.313 5.25 5.25 0 0 1-5.472 6.756c-1.018-.086-1.87.1-2.309.634L7.344 21.3A3.298 3.298 0 1 1 2.7 16.657l8.684-7.151c.533-.44.72-1.291.634-2.309A5.342 5.342 0 0 1 12 6.75ZM4.117 19.125a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008Z" clipRule="evenodd" />
-                  </svg>
-                </div>
+                <CartLineThumb partNumber={item.partNumber} title={item.title} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-zinc-900">{item.title}</p>
                   <p className="mt-0.5 font-mono text-[10px] text-zinc-400">{item.partNumber}</p>
@@ -520,7 +550,7 @@ function CartContents({
                     </button>
                   </div>
                 </div>
-                {item.price && (
+                {typeof item.price === "number" && (
                   <p className="shrink-0 text-xs font-semibold text-zinc-900">
                     ${(item.price * item.qty).toFixed(2)}
                   </p>
@@ -534,9 +564,12 @@ function CartContents({
       {items.length > 0 && (
         <div className="shrink-0 space-y-3 border-t border-zinc-200 p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-500">Subtotal</span>
+            <span className="text-zinc-500">Subtotal (demo)</span>
             <span className="font-semibold text-zinc-900">${total.toFixed(2)}</span>
           </div>
+          <p className="text-[10px] leading-snug text-zinc-400">
+            This cart stays in the browser for the demo. The button below only opens PartSelect; it does not transfer these lines.
+          </p>
           <a
             href="https://www.partselect.com/cart/"
             target="_blank"
@@ -563,19 +596,19 @@ function CartSidebar({
   onRemove: (id: string) => void;
   onQtyChange: (id: string, qty: number) => void;
 }) {
-  const count = items.reduce((s, i) => s + i.qty, 0);
+  const totalQty = items.reduce((s, i) => s + i.qty, 0);
   return (
     <aside className="hidden min-h-0 w-72 shrink-0 flex-col border-r border-zinc-200 bg-white md:flex">
       <div className="shrink-0 border-b border-zinc-200 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900">Cart</h2>
-          {count > 0 && (
+          <h2 className="text-sm font-semibold text-zinc-900">Your cart</h2>
+          {totalQty > 0 && (
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
-              {count} {count === 1 ? "item" : "items"}
+              {totalQty} {totalQty === 1 ? "item" : "items"}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-zinc-500">Checkout on PartSelect.com</p>
+        <p className="mt-0.5 text-xs text-zinc-500">Local demo — not synced with PartSelect</p>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <CartContents items={items} onRemove={onRemove} onQtyChange={onQtyChange} />
@@ -650,8 +683,21 @@ export default function Home() {
   function addToCart(block: ProductBlock) {
     setCartItems((prev) => {
       const existing = prev.find((i) => i.partNumber === block.partNumber);
-      if (existing) return prev.map((i) => i.partNumber === block.partNumber ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { id: crypto.randomUUID(), partNumber: block.partNumber, title: block.title, price: block.price, qty: 1 }];
+      if (existing) {
+        return prev.map((i) =>
+          i.partNumber === block.partNumber ? { ...i, qty: i.qty + 1 } : i
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          partNumber: block.partNumber,
+          title: block.title,
+          price: block.price,
+          qty: 1,
+        },
+      ];
     });
     setToast(`Added to cart: ${block.title}`);
   }
@@ -781,7 +827,7 @@ export default function Home() {
       <CartSidebar
         items={cartItems}
         onRemove={(id) => setCartItems((prev) => prev.filter((i) => i.id !== id))}
-        onQtyChange={(id, qty) => setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty } : i))}
+        onQtyChange={(id, qty) => setCartItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)))}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -813,7 +859,7 @@ export default function Home() {
                   <path d="M2.25 2.25a.75.75 0 0 0 0 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 0 0-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 0 0 0-1.5H5.378A2.25 2.25 0 0 1 7.5 15h11.218a.75.75 0 0 0 .674-.421 60.358 60.358 0 0 0 2.96-7.228.75.75 0 0 0-.525-.965A60.864 60.864 0 0 0 5.68 4.509l-.232-.867A1.875 1.875 0 0 0 3.636 2.25H2.25ZM3.75 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM16.5 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" />
                 </svg>
                 {cartItems.length > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#337788] text-[10px] font-bold text-white">
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#337788] px-0.5 text-[10px] font-bold text-white">
                     {cartItems.reduce((s, i) => s + i.qty, 0)}
                   </span>
                 )}
@@ -930,7 +976,7 @@ export default function Home() {
           items={cartItems}
           onClose={() => setCartOpen(false)}
           onRemove={(id) => setCartItems((prev) => prev.filter((i) => i.id !== id))}
-          onQtyChange={(id, qty) => setCartItems((prev) => prev.map((i) => i.id === id ? { ...i, qty } : i))}
+          onQtyChange={(id, qty) => setCartItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)))}
         />
       )}
     </div>

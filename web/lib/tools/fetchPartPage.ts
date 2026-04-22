@@ -4,7 +4,7 @@
  *
  * Architecture note: this tool makes the agent extensible to the full PartSelect
  * catalog, not just the 4 parts seeded in catalog.json. The local catalog acts
- * as a fast, rich cache for common demo parts; this tool is the fallback for
+ * as a fast, rich cache for common catalog parts; this tool is the fallback for
  * the long tail of real part numbers.
  *
  * Only used in the LLM path (executePartselectTool is sync; this is async).

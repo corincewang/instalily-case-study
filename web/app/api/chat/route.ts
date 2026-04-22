@@ -37,6 +37,7 @@ import {
   buildClarifyReplyFromRetrieval,
   buildOutOfScopeReplyFromRetrieval,
   buildSuggestedActionsFromRetrieval,
+  conversationOnlyResponse,
   type ChatBlock,
 } from "@/lib/buildChatBlocks";
 import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
@@ -182,6 +183,40 @@ export async function POST(request: Request) {
       },
       { status: 400 }
     );
+  }
+
+  const convoOnly = conversationOnlyResponse(message);
+  if (convoOnly) {
+    return streamResponse(async (send) => {
+      const words = convoOnly.reply.split(" ");
+      for (const word of words) {
+        send({ type: "token", text: word + " " });
+        await new Promise((r) => setTimeout(r, 12));
+      }
+      send({
+        type: "done",
+        blocks: [],
+        citations: [],
+        suggested_actions: [
+          { id: "co-find", label: "Find part by PS", prompt: "Find part PS11752778" },
+          {
+            id: "co-compat",
+            label: "Check compatibility",
+            prompt: "Is PS11752778 compatible with WRS325SDHZ?",
+          },
+          {
+            id: "co-symptom",
+            label: "Ice maker not working",
+            prompt:
+              "The ice maker on my Whirlpool fridge is not working. How can I fix it?",
+          },
+        ],
+        no_evidence: true,
+        normalized_part_numbers: [],
+        tool_trace: [],
+        used_llm: false,
+      });
+    });
   }
 
   const history = parseHistory(body.history);

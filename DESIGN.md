@@ -21,7 +21,7 @@ This is a **domain-scoped** assistant for **refrigerator and dishwasher parts** 
 | In scope | Out of scope |
 | -------- | ------------ |
 | Fridge & dishwasher parts (PartSelect-style PS numbers, OEM cross-refs, symptoms, install, compat) | Orders, shipping, returns, warranties, live human handoff |
-| Demo “catalog” as JSON + optional scraped PDP fields | Other appliance categories (washers, HVAC, …) unless clearly refused |
+| Local `catalog.json` + optional scraped PDP fields | Other appliance categories (washers, HVAC, …) unless clearly refused |
 | Live **read-only** fetch of PartSelect HTML for gaps (`fetch_part_page`, part images) | Official PartSelect API (none public); scraping must stay polite / ToS-aware in production |
 
 **Boundary enforcement** is layered (system prompt → deterministic OOS gate → `no_evidence` + citation alignment). The LLM cannot widen scope by prompt alone; see **Session and scope** below.
@@ -50,7 +50,7 @@ Design choices are grouped along four axes: **interface**, **agentic architectur
 | **`buildRetrievalFromTrace`** after specific tools | Avoids re-querying the full catalog when the LLM never called `catalog_search`; **Con:** must keep trace → `Retrieval` mapping in sync when adding tools. |
 | **Async tools** (`fetch_part_page`, `semantic_search`) in the loop | Network + embedding calls handled like other side effects; sync `executePartselectTool` stays pure for the rest. |
 | **Reply consistency guard** (`formatCatalogReplyFromRetrieval` when LLM claims “no match” but blocks exist) | Prevents contradictory UX; **Con:** rare case where streamed tokens disagree with final `replace` — client handles `replace`. |
-| **Dual path: LLM vs no-key deterministic** | Same golden tests and similar UX without vendor lock-in for demos. **Con:** Two code paths to maintain; feature parity skews toward LLM path for streaming/RAG. |
+| **Dual path: LLM vs no-key deterministic** | Same golden tests and similar UX without vendor lock-in for local runs. **Con:** Two code paths to maintain; feature parity skews toward LLM path for streaming/RAG. |
 
 ### Extensibility and scalability
 
