@@ -40,8 +40,9 @@ import {
   type ChatBlock,
 } from "@/lib/buildChatBlocks";
 import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
+import type { HistoryTurn } from "@/lib/llm/runChatAgent";
 import { runChatWithLlmTools } from "@/lib/llm/runChatAgent";
-import type { Citation } from "@/lib/retrieveExact";
+import type { Citation, SessionContext } from "@/lib/retrieveExact";
 
 /**
  * 2-P1: keep only citations whose id is actually rendered as a block (or as a row
@@ -68,9 +69,65 @@ function alignCitationsToBlocks(
   return out;
 }
 
+/** A single prior turn from the client conversation history. */
+type HistoryTurnRaw = { role?: unknown; content?: unknown };
+
+/**
+ * Parse the `history` array sent by the client.
+ * We only trust turns with role "user" | "assistant" and a string content.
+ * Any malformed entries are silently dropped so bad client state never 400s.
+ */
+function parseHistory(raw: unknown): HistoryTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HistoryTurn[] = [];
+  for (const item of raw as HistoryTurnRaw[]) {
+    if (
+      (item.role === "user" || item.role === "assistant") &&
+      typeof item.content === "string" &&
+      item.content.trim().length > 0
+    ) {
+      out.push({ role: item.role, content: item.content.trim() });
+    }
+  }
+  return out;
+}
+
+const PS_TOKEN_RE = /\bPS\d{5,}\b/gi;
+
+/**
+ * Walk the history backwards to find the most recently mentioned PS number and
+ * model token. These become the `SessionContext` that lets retrieveExact carry
+ * values forward without the user repeating themselves.
+ *
+ * Heuristic: look through assistant and user turns alike — the agent may have
+ * confirmed a part number in its own reply.
+ */
+function extractContext(history: HistoryTurn[]): SessionContext {
+  let partNumber: string | undefined;
+  let model: string | undefined;
+
+  // Scan newest-first so we pick up the most recent resolved values.
+  for (let i = history.length - 1; i >= 0; i--) {
+    const { content } = history[i];
+    if (!partNumber) {
+      const m = [...content.matchAll(PS_TOKEN_RE)];
+      if (m.length > 0) partNumber = m[0][0].toUpperCase();
+    }
+    if (!model) {
+      // Model tokens are 8-15 alphanumeric chars with optional internal
+      // punctuation, e.g. WDT780SAEM1, WRS325SDHZ01. A rough heuristic.
+      const modelMatch = content.match(/\b([A-Z]{2,}[\d]{3,}[A-Z0-9]{2,})\b/i);
+      if (modelMatch) model = modelMatch[1].toUpperCase();
+    }
+    if (partNumber && model) break;
+  }
+
+  return { partNumber, model };
+}
+
 type ChatRequestBody = {
   message?: unknown;
-  messages?: unknown;
+  history?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -97,30 +154,31 @@ export async function POST(request: Request) {
     );
   }
 
+  const history = parseHistory(body.history);
+  const context = extractContext(history);
+
   const useLlm = Boolean(process.env.OPENAI_API_KEY?.trim());
+
+  // OOS gate runs first on the raw message — before retrieval results influence
+  // block building. If the message is out-of-scope, we force blocks to empty
+  // regardless of what retrieval found (e.g. an accidental keyword overlap).
+  // The in-scope whitelist inside `detectOutOfScope` ensures real in-domain
+  // queries (mentioning our appliances) bypass this gate.
+  const oos = buildOutOfScopeReplyFromRetrieval(message);
 
   if (useLlm) {
     try {
-      const out = await runChatWithLlmTools(message);
-      const blocks = buildBlocksFromRetrieval(out.retrieval, message);
-      const suggested_actions = buildSuggestedActionsFromRetrieval(
-        out.retrieval,
-        message
-      );
-      // Deterministic reply overrides for empty-block responses. Order:
-      //   (1) out-of-scope — "am I even in domain?" gates everything else,
-      //       since intent classification is word-based and words like
-      //       "replace" fire `install` intent even on "replace the belt on
-      //       my dryer". Also the only defense against prompt injection.
-      //   (2) clarify — query IS in-domain but missing a field.
-      // The in-scope whitelist inside `detectOutOfScope` ensures queries that
-      // mention our appliances (even vaguely) bypass (1) and reach (2).
-      const oos =
-        blocks.length === 0 ? buildOutOfScopeReplyFromRetrieval(message) : null;
+      const out = await runChatWithLlmTools(message, history, context);
+      // If OOS, suppress all blocks — reply only.
+      const blocks = oos ? [] : buildBlocksFromRetrieval(out.retrieval, message);
       const clar =
         blocks.length === 0 && !oos
           ? buildClarifyReplyFromRetrieval(out.retrieval, message)
           : null;
+      const suggested_actions = buildSuggestedActionsFromRetrieval(
+        out.retrieval,
+        message
+      );
       const citations = alignCitationsToBlocks(out.citations, blocks);
       return NextResponse.json({
         reply: oos ? oos.reply : clar ? clar.reply : out.reply,
@@ -141,17 +199,10 @@ export async function POST(request: Request) {
     }
   }
 
-  const { retrieval, tool_trace, normalization } =
-    runToolsForUserMessage(message);
-  const blocks = buildBlocksFromRetrieval(retrieval, message);
-  // Deterministic reply override chain for empty-block responses:
-  //   OOS (domain refusal) → clarify (in-domain, missing field) → default "no match".
-  // OOS is first: intent classification is word-based, so "replace the belt on
-  // my dryer" lights up `install` intent and would otherwise ask for a PS number
-  // instead of refusing. The in-scope whitelist inside `detectOutOfScope` makes
-  // sure real in-domain queries never get refused here.
-  const oos =
-    blocks.length === 0 ? buildOutOfScopeReplyFromRetrieval(message) : null;
+  // Deterministic (no-LLM) path.
+  const { tool_trace, normalization, retrieval } = runToolsForUserMessage(message, context);
+  // If OOS, suppress all blocks.
+  const blocks = oos ? [] : buildBlocksFromRetrieval(retrieval, message);
   const clar =
     blocks.length === 0 && !oos ? buildClarifyReplyFromRetrieval(retrieval, message) : null;
   const reply = formatCatalogReplyFromRetrieval(

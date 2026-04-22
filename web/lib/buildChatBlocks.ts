@@ -418,7 +418,7 @@ function buildSearchSupportBlock(
  * `search` (browse queries with no hits are already semantically "no results").
  */
 type Clarification = {
-  reason: "need_part" | "need_model" | "need_part_and_model" | "need_brand_topic" | "need_symptom";
+  reason: "need_part" | "need_model" | "need_part_and_model" | "need_brand_topic" | "need_symptom" | "need_part_name";
   title: string;
   subtitle: string;
   question: string;
@@ -563,6 +563,22 @@ export function detectClarification(
         hints: [
           "Example: What parts do I need for no ice and water dispenser not working?",
           "Example: Which parts to replace for dishwasher won't start?",
+        ],
+      };
+    }
+    case "search": {
+      // If retrieval already found something (keyword / appliance hit), no need to clarify.
+      if (r.part || (r.searchResults && r.searchResults.length > 0)) return null;
+      return {
+        reason: "need_part_name",
+        title: "Which part?",
+        subtitle: "For part lookup",
+        question:
+          "Which part are you looking for? You can share a PS number, an OEM code, a part name, or describe what's broken.",
+        hints: [
+          "Example: Find part PS11752778",
+          "Example: Show me refrigerator door bin parts",
+          "Example: I need a dishwasher door latch",
         ],
       };
     }
@@ -730,9 +746,8 @@ export function buildClarifyReplyFromRetrieval(
   userMessage: string
 ): { reply: string; hints: string[] } | null {
   const intent = classifyIntent(userMessage);
-  // `generic` and `search` deliberately never clarify — that keeps garbage input
-  // and empty-browse paths honestly no_evidence instead of chatty.
-  if (intent === "generic" || intent === "search") return null;
+  // `generic` never clarifies — keeps garbage input as honest no_evidence.
+  if (intent === "generic") return null;
   // `detectClarification` already knows, per intent, which anchor is missing — so
   // we can ask about "model" even when `r.part` was found (e.g. "Is PS11752778 compatible?").
   const clar = detectClarification(userMessage, r, intent);
@@ -782,7 +797,15 @@ export function buildBlocksFromRetrieval(
       break;
     case "generic":
     default:
-      if (r.part) blocks.push(buildProductBlock(r.part));
+      // If retrieval resolved a compatibility row (e.g. the user replied with
+      // just a model number after a clarify turn that already knew the part),
+      // show the compat card — it's the most specific answer we have.
+      // Otherwise fall back to a product card if a part is known.
+      if (r.compatibility) {
+        blocks.push(buildCompatSupportBlock(r.compatibility));
+      } else if (r.part) {
+        blocks.push(buildProductBlock(r.part));
+      }
       break;
   }
 

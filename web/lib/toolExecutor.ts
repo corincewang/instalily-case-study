@@ -1,10 +1,18 @@
 import {
   CATALOG_SEARCH_TOOL_NAME,
+  CHECK_COMPATIBILITY_TOOL_NAME,
+  GET_INSTALL_GUIDE_TOOL_NAME,
+  LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
+  SEARCH_BY_SYMPTOM_TOOL_NAME,
   type ToolName,
 } from "./agentTools";
 import { retrieveExact } from "./retrieveExact";
+import { checkCompatibilityTool } from "./tools/checkCompatibility";
+import { getInstallGuideTool } from "./tools/getInstallGuide";
+import { lookupPartTool } from "./tools/lookupPart";
 import { normalizePartNumberTool } from "./tools/normalizePartNumber";
+import { searchBySymptomTool } from "./tools/searchBySymptom";
 
 export type ToolExecutionResult = {
   name: ToolName;
@@ -70,6 +78,44 @@ export function executePartselectTool(
         ok: true,
         output: retrieveExact(query),
       };
+    }
+    case LOOKUP_PART_TOOL_NAME: {
+      const raw = (args as { part_number?: unknown }).part_number;
+      if (typeof raw !== "string" || !raw.trim()) {
+        return fail(LOOKUP_PART_TOOL_NAME, "part_number_required");
+      }
+      return { name: LOOKUP_PART_TOOL_NAME, ok: true, output: lookupPartTool({ part_number: raw }) };
+    }
+    case CHECK_COMPATIBILITY_TOOL_NAME: {
+      const a = args as { part_number?: unknown; model?: unknown };
+      if (typeof a.part_number !== "string" || !a.part_number.trim()) {
+        return fail(CHECK_COMPATIBILITY_TOOL_NAME, "part_number_required");
+      }
+      if (typeof a.model !== "string" || !a.model.trim()) {
+        return fail(CHECK_COMPATIBILITY_TOOL_NAME, "model_required");
+      }
+      return {
+        name: CHECK_COMPATIBILITY_TOOL_NAME,
+        ok: true,
+        output: checkCompatibilityTool({ part_number: a.part_number, model: a.model }),
+      };
+    }
+    case GET_INSTALL_GUIDE_TOOL_NAME: {
+      const raw = (args as { part_number?: unknown }).part_number;
+      if (typeof raw !== "string" || !raw.trim()) {
+        return fail(GET_INSTALL_GUIDE_TOOL_NAME, "part_number_required");
+      }
+      return { name: GET_INSTALL_GUIDE_TOOL_NAME, ok: true, output: getInstallGuideTool({ part_number: raw }) };
+    }
+    case SEARCH_BY_SYMPTOM_TOOL_NAME: {
+      const raw = (args as { symptom?: unknown }).symptom;
+      if (typeof raw !== "string" || !raw.trim()) {
+        return fail(SEARCH_BY_SYMPTOM_TOOL_NAME, "symptom_required");
+      }
+      if (raw.length > MAX_QUERY_LEN) {
+        return fail(SEARCH_BY_SYMPTOM_TOOL_NAME, "symptom_too_long", { limit: MAX_QUERY_LEN });
+      }
+      return { name: SEARCH_BY_SYMPTOM_TOOL_NAME, ok: true, output: searchBySymptomTool({ symptom: raw }) };
     }
     default:
       return fail(name as ToolName, "unknown_tool", { name });

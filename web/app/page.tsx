@@ -342,8 +342,8 @@ function BlockCard({ block }: { block: ChatBlock }) {
 }
 
 const QUICK_ACTIONS = [
-  { label: "Find a part", text: "Find part PS11752778" },
-  { label: "Check compatibility", text: "Is PS11752778 compatible with WDT780SAEM1?" },
+  { label: "Find a part", text: "I want to find a part" },
+  { label: "Check compatibility", text: "Is PS11752778 compatible with WRS325SDHZ?" },
   { label: "Installation help", text: "How do I install PS11752778?" },
   { label: "Troubleshoot", text: "Whirlpool refrigerator ice maker not working" },
 ] as const;
@@ -382,10 +382,19 @@ export default function Home() {
     setDraft("");
 
     try {
+      // Capture history before adding the new user message so we don't echo
+      // it twice. We snapshot inside the closure using the functional updater's
+      // previous value via a separate ref-like read.
+      const currentMessages = messages; // closure over state at call time
+      const history = currentMessages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .filter((m) => m.id !== "welcome") // skip the static greeting
+        .map((m) => ({ role: m.role, content: m.content }));
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ message: trimmed, history }),
       });
       const data = (await res.json()) as ChatApiResponse & {
         error?: string;
@@ -485,7 +494,15 @@ export default function Home() {
             </div>
           ))}
           {loading && (
-            <p className="text-center text-sm italic text-zinc-400">Thinking…</p>
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-bl-md border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.3s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-400" />
+                </span>
+              </div>
+            </div>
           )}
           <div ref={bottomRef} />
         </div>

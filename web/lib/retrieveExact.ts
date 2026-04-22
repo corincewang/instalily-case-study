@@ -37,6 +37,19 @@ export type SearchHit = {
 };
 
 /**
+ * Session context carried forward from previous turns.
+ * When the current message resolves a part or model on its own, those values
+ * win. The context fields are only used as a fallback when the current message
+ * would otherwise leave `part` or a model search empty.
+ */
+export type SessionContext = {
+  /** PS number resolved in a prior turn (e.g. after a clarify exchange). */
+  partNumber?: string;
+  /** Model token resolved in a prior turn. */
+  model?: string;
+};
+
+/**
  * Hybrid retrieval:
  * 1) exact PS number in message                                       (4-P0)
  * 2) OEM / manufacturer part number substring                         (category 5)
@@ -49,8 +62,14 @@ export type SearchHit = {
  * 9) appliance / keyword browse (multi-result search)                 (category 4 browse)
  *
  * If a compatibility row hits but no PS was in the message, the linked part row is filled in.
+ *
+ * `context` carries resolved values from prior turns so a clarify→answer pair
+ * works without the user repeating themselves.
  */
-export function retrieveExact(userMessage: string): {
+export function retrieveExact(
+  userMessage: string,
+  context?: SessionContext
+): {
   citations: Citation[];
   part?: CatalogShape["parts"][number];
   compatibility?: CatalogShape["compatibilities"][number];
@@ -122,12 +141,41 @@ export function retrieveExact(userMessage: string): {
     }
   }
 
+  // Session context carry-forward (Step 1 / Step 3):
+  // If the current message didn't resolve a part on its own but a prior turn did,
+  // seed `part` from the context so the user doesn't have to repeat themselves.
+  // Example: "How do I install it?" after agent already knows the PS number.
+  if (!part && context?.partNumber) {
+    const carried = catalog.parts.find(
+      (p) => p.partNumber.toUpperCase() === context.partNumber!.toUpperCase()
+    );
+    if (carried) {
+      part = carried;
+      pushCitation(citations, {
+        id: carried.id,
+        source: "part_catalog",
+        label: "Part catalog (session context)",
+      });
+    }
+  }
+
+  // Build an augmented haystack that also includes the context model token so
+  // the compat search below can match even when the current message doesn't
+  // repeat the model number.
+  const contextModelToken = context?.model ?? "";
+  const augUpper = contextModelToken
+    ? `${upper} ${contextModelToken.toUpperCase()}`
+    : upper;
+  const augCollapsed = contextModelToken
+    ? `${collapsedHay} ${collapseModelToken(contextModelToken)}`
+    : collapsedHay;
+
   let compatibility: CatalogShape["compatibilities"][number] | undefined;
   for (const row of catalog.compatibilities) {
     const modelUpper = normalizeModelToken(row.model);
     const modelCollapsed = collapseModelToken(row.model);
     const modelMatches =
-      upper.includes(modelUpper) || collapsedHay.includes(modelCollapsed);
+      augUpper.includes(modelUpper) || augCollapsed.includes(modelCollapsed);
     if (modelMatches) {
       if (!part || row.partNumber.toUpperCase() === part.partNumber.toUpperCase()) {
         compatibility = row;

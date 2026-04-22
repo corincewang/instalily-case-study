@@ -12,11 +12,11 @@ import assert from "node:assert/strict";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 
-async function ask(message) {
+async function ask(message, history = []) {
   const res = await fetch(`${BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history }),
   });
   const body = await res.text();
   if (!res.ok) {
@@ -29,11 +29,40 @@ async function ask(message) {
   }
 }
 
+/**
+ * Simulate a multi-turn conversation and return the final turn's response.
+ * Each entry in `turns` is a user message string; the function builds the
+ * history automatically from the simulated assistant replies.
+ */
+async function conversation(turns) {
+  let history = [];
+  let last = null;
+  for (const msg of turns) {
+    last = await ask(msg, history);
+    history.push({ role: "user", content: msg });
+    history.push({ role: "assistant", content: last.reply ?? "" });
+  }
+  return last;
+}
+
 function citationIds(r) {
   return Array.isArray(r.citations) ? r.citations.map((c) => c.id) : [];
 }
 function blockTypes(r) {
   return Array.isArray(r.blocks) ? r.blocks.map((b) => b.type) : [];
+}
+/**
+ * When the LLM is active (`used_llm === true`), assert that at least one
+ * tool_trace entry has the expected tool name. Skipped silently on the
+ * deterministic path (no LLM key) so the golden suite still passes in CI.
+ */
+function assertToolUsed(r, toolName, caseName) {
+  if (!r.used_llm) return; // deterministic path: new tools not invoked
+  const names = (r.tool_trace ?? []).map((t) => t.name);
+  assert.ok(
+    names.includes(toolName),
+    `[LLM] expected tool_trace to include "${toolName}"; got ${JSON.stringify(names)} — ${caseName}`
+  );
 }
 
 const cases = [
@@ -91,6 +120,7 @@ const cases = [
       for (const s of support.stories) {
         assert.ok(s.id && s.title && s.body, `story missing core fields: ${JSON.stringify(s)}`);
       }
+      assertToolUsed(r, "get_install_guide", "Install by PS number");
     },
   },
   {
@@ -153,6 +183,7 @@ const cases = [
         support.verdict && support.verdict.tone === "ok",
         `expected verdict.tone=ok; got ${JSON.stringify(support.verdict)}`
       );
+      assertToolUsed(r, "check_compatibility", "Compatibility ok (WRS325SDHZ)");
     },
   },
   {
@@ -172,6 +203,7 @@ const cases = [
         Array.isArray(support.steps) && support.steps.length > 0,
         `support.steps should be non-empty; got ${JSON.stringify(support.steps)}`
       );
+      assertToolUsed(r, "search_by_symptom", "Ice maker symptom");
     },
   },
   {
@@ -248,6 +280,7 @@ const cases = [
         cites.includes("part-ps11738120") && cites.includes("part-ps734936"),
         `citations should cover both top candidates; got ${JSON.stringify(cites)}`
       );
+      assertToolUsed(r, "search_by_symptom", "Reverse diagnosis");
     },
   },
   {
@@ -429,7 +462,75 @@ const cases = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Multi-turn session-memory tests
+// Each `turns` array simulates a conversation; `check` receives the FINAL turn.
+// ---------------------------------------------------------------------------
+const multiTurnCases = [
+  {
+    name: "[multi-turn] Clarify model → compatibility answer stitches across turns",
+    turns: [
+      // Turn 1: compat question with part but no model → agent clarifies
+      "Is PS11752778 compatible?",
+      // Turn 2: user supplies only the model number — history carries the PS
+      "WRS325SDHZ",
+    ],
+    check: (r) => {
+      assert.equal(
+        r.no_evidence,
+        false,
+        `2nd turn should resolve evidence via history; no_evidence=${r.no_evidence}`
+      );
+      const support = (r.blocks ?? []).find((b) => b.type === "support");
+      assert.ok(
+        support,
+        `2nd turn should render a support block; got ${JSON.stringify((r.blocks ?? []).map((b) => b.type))}`
+      );
+      assert.equal(
+        support.kind,
+        "compat",
+        `2nd turn block kind should be compat; got ${support.kind}`
+      );
+      assert.ok(
+        support.verdict && support.verdict.tone === "ok",
+        `WRS325SDHZ + PS11752778 should be compatible; got ${JSON.stringify(support.verdict)}`
+      );
+    },
+  },
+  {
+    name: "[multi-turn] Part established in turn 1 → install query in turn 2 resolves",
+    turns: [
+      // Turn 1: user asks about the part by PS number (price / info intent)
+      "How much is PS11752778?",
+      // Turn 2: install question with no PS number — should carry forward from history
+      "How do I install it?",
+    ],
+    check: (r) => {
+      assert.equal(
+        r.no_evidence,
+        false,
+        `2nd turn should carry part from history; no_evidence=${r.no_evidence}`
+      );
+      const support = (r.blocks ?? []).find((b) => b.type === "support");
+      assert.ok(
+        support,
+        `2nd turn should render a support block; got ${JSON.stringify((r.blocks ?? []).map((b) => b.type))}`
+      );
+      assert.equal(
+        support.kind,
+        "install",
+        `2nd turn block kind should be install; got ${support.kind}`
+      );
+      assert.ok(
+        Array.isArray(support.steps) && support.steps.length > 0,
+        `install block should have steps; got ${JSON.stringify(support.steps)}`
+      );
+    },
+  },
+];
+
 let failed = 0;
+
 for (const c of cases) {
   try {
     const r = await ask(c.message);
@@ -441,7 +542,20 @@ for (const c of cases) {
     console.error(`FAIL  ${c.name}\n      ${msg}`);
   }
 }
-const total = cases.length;
+
+for (const c of multiTurnCases) {
+  try {
+    const r = await conversation(c.turns);
+    c.check(r);
+    console.log(`PASS  ${c.name}`);
+  } catch (e) {
+    failed += 1;
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`FAIL  ${c.name}\n      ${msg}`);
+  }
+}
+
+const total = cases.length + multiTurnCases.length;
 if (failed === 0) {
   console.log(`\n${total}/${total} golden cases passed.`);
   process.exit(0);
