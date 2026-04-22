@@ -121,4 +121,25 @@ export const PARTSELECT_OPENAI_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "fetch_part_page",
+      description:
+        "Fetches live product data for any PS part number directly from PartSelect.com. " +
+        "Use this ONLY when lookup_part returns an error (part not in local catalog). " +
+        "Returns title, price, stock status, and a description with install hints. " +
+        "May take up to 12 seconds — only call when local tools have failed.",
+      parameters: {
+        type: "object",
+        properties: {
+          part_number: {
+            type: "string",
+            description: "The PS part number to look up, e.g. PS3406971",
+          },
+        },
+        required: ["part_number"],
+      },
+    },
+  },
 ];

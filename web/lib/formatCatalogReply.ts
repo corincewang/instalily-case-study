@@ -1,72 +1,112 @@
 import { retrieveExact } from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
+type Part = NonNullable<Retrieval["part"]>;
+type Candidate = NonNullable<Retrieval["candidates"]>[number];
 
-function partCommerceSnippet(part: NonNullable<Retrieval["part"]>): string {
+function priceSnippet(part: Part): string {
   const p = part as unknown as Record<string, unknown>;
-  const bits: string[] = [];
-  if (typeof p.price === "number") {
-    const currency = typeof p.currency === "string" ? p.currency : "USD";
-    const priceText = currency === "USD" ? `$${p.price.toFixed(2)}` : `${p.price.toFixed(2)} ${currency}`;
-    bits.push(priceText);
-  }
-  if (typeof p.inStock === "boolean") {
-    bits.push(p.inStock ? "in stock" : "out of stock");
-  }
-  return bits.length > 0 ? ` (${bits.join(" · ")})` : "";
+  if (typeof p.price !== "number") return "";
+  const currency = typeof p.currency === "string" ? p.currency : "USD";
+  const price = currency === "USD" ? `$${(p.price as number).toFixed(2)}` : `${(p.price as number).toFixed(2)} ${currency}`;
+  const stock = typeof p.inStock === "boolean" ? (p.inStock ? "in stock" : "out of stock") : null;
+  return stock ? ` (${price}, ${stock})` : ` (${price})`;
 }
 
 /**
- * Fallback reply when the LLM returns no final text.
- * Short prose only; cards carry catalog layout; chips carry next steps.
+ * Build a reasoning-first reply from retrieval data.
+ * Used in the deterministic (no-LLM) path; mirrors what the LLM should say
+ * when the API key is present. Cards carry the structured data — this text
+ * carries interpretation and prioritization.
  */
 export function formatCatalogReplyFromRetrieval(
   retrieval: Retrieval,
   userPreview: string,
   clarifyQuestion?: string
 ): string {
-  const { part, compatibility, guide } = retrieval;
+  const { part, compatibility, guide, candidates } = retrieval;
+
+  // Clarify — no data at all
   if (clarifyQuestion && !part && !compatibility && !guide) {
     return clarifyQuestion;
   }
-  if (!part && !compatibility && !guide) {
+
+  // Complete miss
+  if (!part && !compatibility && !guide && (!candidates || candidates.length === 0)) {
     return (
-      "I couldn’t match that to our sample catalog. Double-check the part or model number, or try a different wording. " +
-      `(You wrote: ${userPreview.slice(0, 160)}${userPreview.length > 160 ? "…" : ""})`
+      "I wasn't able to find anything for that — double-check the part or model number, " +
+      `or try different wording. (You asked: ${userPreview.slice(0, 120)}${userPreview.length > 120 ? "…" : ""})`
     );
   }
 
+  // Compatibility only
   if (compatibility && !part && !guide) {
-    const ok = compatibility.compatible ? "compatible" : "not compatible";
-    return (
-      `In this demo data, **${compatibility.partNumber}** is **${ok}** with model **${compatibility.model}**. ` +
-      "Details stay in the compatibility card below; use the chips for your next step."
-    );
+    const verdict = compatibility.compatible ? "compatible" : "not compatible";
+    const reason = (compatibility as unknown as Record<string, unknown>).note as string | undefined;
+    const base = `**${compatibility.partNumber}** is **${verdict}** with model **${compatibility.model}**.`;
+    return reason ? `${base} ${reason}` : base;
   }
 
+  // Part only (price/stock/details lookup)
   if (part && !compatibility && !guide) {
     return (
-      `**${part.partNumber}**${partCommerceSnippet(part)} matches our sample listing for what you asked. ` +
-      "Specs and install text are in the part card below; chips suggest logical next steps."
+      `Here's **${(part as unknown as Record<string, unknown>).partNumber as string}**${priceSnippet(part)}.` +
+      " Full specs and installation info are in the card below."
     );
   }
 
+  // Repair guide only — reason about the symptom
   if (guide && !part && !compatibility) {
+    const likelyParts = (guide as unknown as Record<string, unknown>).likelyParts as string[] | undefined;
+    const hasCandidates = candidates && candidates.length > 0;
+
+    let reply =
+      `For **${(guide as unknown as Record<string, unknown>).brand as string} ${(guide as unknown as Record<string, unknown>).appliance as string}** — ${(guide as unknown as Record<string, unknown>).topic as string} — ` +
+      "start with the steps in the repair guide card before ordering parts.";
+
+    if (hasCandidates && candidates!.length >= 2) {
+      const top = candidates![0] as Candidate;
+      const second = candidates![1] as Candidate;
+      const topPN = (top.part as unknown as Record<string, unknown>).partNumber as string;
+      const secondPN = (second.part as unknown as Record<string, unknown>).partNumber as string;
+      reply +=
+        ` If the basic checks don't resolve it, **${topPN}** is the most common part to replace first —` +
+        ` though **${secondPN}** is worth ruling out if the symptom points to a supply issue.`;
+    } else if (likelyParts && likelyParts.length > 0) {
+      reply += ` The most commonly replaced part for this issue is **${likelyParts[0]}**.`;
+    }
+
+    return reply;
+  }
+
+  // Candidates only (reverse diagnosis without a full guide)
+  if (!guide && candidates && candidates.length > 0 && !part && !compatibility) {
+    const top = candidates[0] as Candidate;
+    const topPN = (top.part as unknown as Record<string, unknown>).partNumber as string;
+    const topTitle = (top.part as unknown as Record<string, unknown>).title as string;
+
+    if (candidates.length === 1) {
+      return `Based on that symptom, **${topPN}** (${topTitle}) is the most likely part to replace — details in the card below.`;
+    }
+
+    const second = candidates[1] as Candidate;
+    const secondPN = (second.part as unknown as Record<string, unknown>).partNumber as string;
+    const secondTitle = (second.part as unknown as Record<string, unknown>).title as string;
     return (
-      `There’s a sample repair note that may apply to **${guide.brand} ${guide.appliance}** (${guide.topic}). ` +
-      "Steps are in the repair card below; chips suggest follow-ups."
+      `Based on that symptom, **${topPN}** (${topTitle}) is the most likely culprit.` +
+      ` **${secondPN}** (${secondTitle}) is worth checking too if the first replacement doesn't resolve it.` +
+      " See the cards below for details."
     );
   }
 
-  if (part && compatibility && !guide) {
-    return (
-      `We matched **${part.partNumber}**${partCommerceSnippet(part)} and a compatibility note for model **${compatibility.model}**. ` +
-      "Details are in the cards below; use the chips for your next step."
-    );
+  // Part + compatibility (e.g. user asked about compat and we resolved both)
+  if (part && compatibility) {
+    const verdict = compatibility.compatible ? "fits" : "does not fit";
+    const pn = (part as unknown as Record<string, unknown>).partNumber as string;
+    const model = (compatibility as unknown as Record<string, unknown>).model as string;
+    return `**${pn}**${priceSnippet(part)} **${verdict}** model **${model}**. Details are in the cards below.`;
   }
 
-  return (
-    "Your question lines up with more than one catalog row in this demo (part, compatibility, and/or repair). " +
-    "See the cards below for each layer; use the chips for what you want to do next."
-  );
+  // Fallback
+  return "Here's what I found — see the cards below for details.";
 }

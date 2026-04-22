@@ -157,6 +157,51 @@ export async function POST(request: Request) {
   const history = parseHistory(body.history);
   const context = extractContext(history);
 
+  // Deterministic answers for common informational questions that don't need retrieval.
+  const GLOSSARY: { pattern: RegExp; reply: string }[] = [
+    {
+      pattern: /\bwhat\s+is\s+a?\s*ps\s*(number|#|num)?\b/i,
+      reply:
+        "A PS number (PartSelect number) is a unique part identifier used on PartSelect.com. " +
+        "It always starts with \"PS\" followed by 5–8 digits — for example, PS11752778. " +
+        "You'll find it on the part's product page, your order history, or sometimes printed on the part itself. " +
+        "Sharing a PS number is the fastest way to look up exact pricing, stock, compatibility, and installation steps.",
+    },
+    {
+      pattern: /\bwhat\s+is\s+an?\s*(oem|oem\s+code|oem\s+number|oem\s+part)\b/i,
+      reply:
+        "An OEM code (Original Equipment Manufacturer part number) is the manufacturer's own identifier for a part — " +
+        "for example, Whirlpool might use W10321304 or WPW10321304 for the same door shelf bin. " +
+        "OEM numbers appear on the old part itself, in your appliance's tech sheet, or in the service manual. " +
+        "You can search by OEM number on PartSelect and it will map to the correct PS number automatically.",
+    },
+    {
+      pattern: /\b(speak|talk|connect|chat)\s+(to|with)\s+a?\s*(human|person|agent|representative|rep|someone)\b/i,
+      reply:
+        "I'm a virtual assistant — I can't connect you directly to a live agent from this chat window. " +
+        "For order issues, returns, or anything I can't resolve, please reach PartSelect support at " +
+        "1-888-738-4871 (Mon–Fri 8 AM–8 PM ET, Sat 9 AM–5 PM ET) or use the contact form at " +
+        "partselect.com/Contact-Us. Is there anything else I can help you find in the meantime?",
+    },
+  ];
+  for (const { pattern, reply } of GLOSSARY) {
+    if (pattern.test(message)) {
+      return NextResponse.json({
+        reply,
+        blocks: [],
+        citations: [],
+        suggested_actions: [
+          { id: "g-find", label: "Find a part by PS number", prompt: "Find part PS11752778" },
+          { id: "g-compat", label: "Check compatibility", prompt: "Is PS11752778 compatible with WRS325SDHZ?" },
+        ],
+        no_evidence: true,
+        normalized_part_numbers: [],
+        tool_trace: [],
+        used_llm: false,
+      });
+    }
+  }
+
   const useLlm = Boolean(process.env.OPENAI_API_KEY?.trim());
 
   // OOS gate runs first on the raw message — before retrieval results influence

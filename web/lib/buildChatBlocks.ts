@@ -579,6 +579,8 @@ export function detectClarification(
           "Example: Find part PS11752778",
           "Example: Show me refrigerator door bin parts",
           "Example: I need a dishwasher door latch",
+          "What is a PS number?",
+          "What is an OEM code?",
         ],
       };
     }
@@ -779,9 +781,10 @@ export function buildBlocksFromRetrieval(
       if (r.compatibility) blocks.push(buildCompatSupportBlock(r.compatibility));
       break;
     case "repair":
-      if (r.guide) blocks.push(buildRepairSupportBlock(r.guide));
-      break;
     case "diagnose":
+      // Always show the repair guide first if one matched, then candidate parts.
+      // This gives users the consistent flow: "try these steps → if you need a part, here are the candidates."
+      if (r.guide) blocks.push(buildRepairSupportBlock(r.guide));
       if (r.candidates && r.candidates.length > 0) {
         blocks.push(buildCandidatesSupportBlock(r.candidates));
       }
@@ -837,7 +840,7 @@ export function buildSuggestedActionsFromRetrieval(
     oos.hints.forEach((h, i) => {
       push({
         id: `oos-ex-${i}`,
-        label: h.length > 28 ? `${h.slice(0, 28)}…` : h,
+        label: h,
         prompt: h,
       });
     });
@@ -848,11 +851,11 @@ export function buildSuggestedActionsFromRetrieval(
     clar.hints.forEach((h, i) => {
       push({
         id: `clarify-ex-${i}`,
-        label: h.length > 28 ? `${h.slice(0, 28)}…` : h,
+        label: h,
         prompt: h,
       });
     });
-    return out.slice(0, 5);
+    return out.slice(0, 6);
   }
 
   const pn = r.part?.partNumber ?? r.compatibility?.partNumber;
@@ -994,6 +997,17 @@ export function buildSuggestedActionsFromRetrieval(
         });
       }
       break;
+  }
+
+  // Escalation chip — available when we have real retrieval results (part, compat,
+  // guide, or candidates), giving the user a clear path to human support.
+  const hasResult = !!(r.part ?? r.compatibility ?? r.guide ?? (r.candidates && r.candidates.length > 0));
+  if (hasResult && !oos) {
+    push({
+      id: "escalate",
+      label: "Speak to an agent",
+      prompt: "I'd like to speak with a human support agent",
+    });
   }
 
   return out.slice(0, 5);

@@ -5,6 +5,7 @@ import type { ToolTraceEntry } from "../agentTools";
 import {
   CATALOG_SEARCH_TOOL_NAME,
   CHECK_COMPATIBILITY_TOOL_NAME,
+  FETCH_PART_PAGE_TOOL_NAME,
   GET_INSTALL_GUIDE_TOOL_NAME,
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
@@ -14,6 +15,7 @@ import catalog from "../../data/catalog.json";
 import { formatCatalogReplyFromRetrieval } from "../formatCatalogReply";
 import type { Citation, SessionContext } from "../retrieveExact";
 import { retrieveExact } from "../retrieveExact";
+import { fetchPartPageTool } from "../tools/fetchPartPage";
 import { executePartselectTool } from "../toolExecutor";
 import { PARTSELECT_OPENAI_TOOLS } from "./openaiTools";
 import { PARTSELECT_AGENT_SYSTEM } from "./systemPrompt";
@@ -80,6 +82,47 @@ function buildRetrievalFromTrace(
           );
           if (part) pushCite(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
         }
+      }
+    }
+
+    // fetch_part_page: synthesize a catalog-compatible part from the live PartSelect data.
+    if (entry.name === FETCH_PART_PAGE_TOOL_NAME) {
+      const o = entry.output as {
+        ok?: boolean;
+        partNumber?: string;
+        title?: string;
+        price?: number;
+        inStock?: boolean;
+        description?: string;
+        rating?: number;
+        reviewCount?: number;
+        source?: string;
+      };
+      if (o?.ok && o.partNumber && !part) {
+        // Build a minimal catalog-part shape so the existing ProductBlock path can render it.
+        // Fields not available from the live fetch are left undefined/omitted.
+        const livePart = {
+          id: `live-${o.partNumber}`,
+          partNumber: o.partNumber,
+          title: o.title ?? o.partNumber,
+          applianceFamily: "refrigerator or dishwasher",
+          keywords: [],
+          symptoms: [],
+          installSteps: o.description ?? "",
+          price: o.price,
+          currency: "USD" as const,
+          inStock: o.inStock,
+          rating: o.rating,
+          reviewCount: o.reviewCount,
+          // Signal to the UI that this came from a live fetch, not the local catalog
+          _liveSource: true,
+        } as unknown as CatalogPart;
+        part = livePart;
+        pushCite(citations, {
+          id: livePart.id,
+          source: "part_catalog",
+          label: "PartSelect.com (live)",
+        });
       }
     }
 
@@ -173,7 +216,21 @@ export async function runChatWithLlmTools(
       if (tc.type !== "function") continue;
       const name = tc.function.name;
       const argsJson = tc.function.arguments ?? "{}";
-      const exec = executePartselectTool(name, argsJson, context);
+
+      // fetch_part_page is async (network call) — handle separately.
+      let exec: ToolTraceEntry;
+      if (name === FETCH_PART_PAGE_TOOL_NAME) {
+        try {
+          const args = JSON.parse(argsJson) as { part_number?: string };
+          const result = await fetchPartPageTool({ part_number: args.part_number ?? "" });
+          exec = { name: FETCH_PART_PAGE_TOOL_NAME, ok: result.ok, output: result };
+        } catch {
+          exec = { name: FETCH_PART_PAGE_TOOL_NAME, ok: false, output: { error: "fetch_failed" } };
+        }
+      } else {
+        exec = executePartselectTool(name, argsJson, context);
+      }
+
       tool_trace.push({
         name: exec.name,
         ok: exec.ok,
@@ -229,6 +286,21 @@ export async function runChatWithLlmTools(
   }
 
   if (!replyText) {
+    replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
+  }
+
+  // Consistency guard: if the LLM said "no match / couldn't find" but retrieval
+  // actually found content (guide, part, candidates), the LLM was working from
+  // stale/incomplete tool output. Override with the deterministic reply so the
+  // text and the cards always agree.
+  const hasContent = !!(
+    lastRetrieval.guide ??
+    lastRetrieval.part ??
+    lastRetrieval.compatibility ??
+    (lastRetrieval.candidates && lastRetrieval.candidates.length > 0)
+  );
+  const llmSaysMiss = /couldn.t\s+match|couldn.t\s+find|no\s+match|not\s+find|unable\s+to\s+find|nothing\s+in|didn.t\s+find|not\s+found\s+in|no\s+result/i.test(replyText);
+  if (hasContent && llmSaysMiss) {
     replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
   }
 

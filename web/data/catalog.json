@@ -17,7 +17,10 @@
         "broken door shelf",
         "door bin won't stay in",
         "items falling out of door",
-        "yellowed door bin"
+        "yellowed door bin",
+        "door shelf bin is cracked",
+        "door bin cracked",
+        "shelf bin broken"
       ],
       "installSteps": "1) Open the refrigerator door and find the cracked or missing bin.\n2) Lift the old bin straight up off the molded rail on the inside of the door.\n3) Line the new bin up with the rail's tabs and push straight down until it seats — no tools required.",
       "applianceFamily": "refrigerator",
@@ -198,8 +201,63 @@
       "manufacturerPartNumber": "W10712394",
       "replaces": ["AP6023703", "W10190961"],
       "relatedParts": ["PS734936"],
-      "repairStories": [],
-      "questions": []
+      "repairStories": [
+        {
+          "id": "story-ps11738120-1",
+          "title": "Fixed in an afternoon — no appliance experience needed",
+          "body": "Our ice maker had been dead for two months. Watched one YouTube video, ordered this part. Unplugged the fridge, pulled off the ice maker cover, disconnected the harness, swapped the unit, plugged it back in. Had ice within 24 hours. Total hands-on time maybe 30 minutes.",
+          "author": "Dan M.",
+          "location": "Columbus, OH",
+          "difficulty": "Moderate",
+          "timeLabel": "30–60 mins",
+          "toolsUsed": ["¼-inch nut driver", "Phillips screwdriver"],
+          "otherPartsUsed": [],
+          "helpfulYes": 87,
+          "helpfulTotal": 92
+        },
+        {
+          "id": "story-ps11738120-2",
+          "title": "Saved $350 vs. a service call",
+          "body": "Repairman quoted $400. Part was $128 and took me 45 minutes. The hardest part was reaching the wire harness clips — a small flathead helps. Everything clicked back together perfectly and the ice maker started cycling the same night.",
+          "author": "Rachel T.",
+          "location": "Phoenix, AZ",
+          "difficulty": "Moderate",
+          "timeLabel": "30–60 mins",
+          "toolsUsed": ["¼-inch nut driver", "flat-head screwdriver"],
+          "otherPartsUsed": [],
+          "helpfulYes": 64,
+          "helpfulTotal": 68
+        },
+        {
+          "id": "story-ps11738120-3",
+          "title": "Check the water valve first — mine was the valve, not this",
+          "body": "Ordered this assembly thinking it was the problem. Turned out my water inlet valve (PS734936) was clogged. Returned this unit unopened. Tip: if the ice maker makes clicking sounds but no water fills, start with the valve — cheaper fix.",
+          "author": "Chris L.",
+          "location": "Denver, CO",
+          "difficulty": "Moderate",
+          "timeLabel": "30–60 mins",
+          "toolsUsed": ["¼-inch nut driver"],
+          "otherPartsUsed": ["PS734936"],
+          "helpfulYes": 112,
+          "helpfulTotal": 118
+        }
+      ],
+      "questions": [
+        {
+          "id": "qa-ps11738120-1",
+          "author": "Mark S.",
+          "date": "2023-07-14",
+          "question": "How do I know if it's the ice maker assembly or the water inlet valve that's bad?",
+          "answer": "Listen: if you hear clicking but no water fills the mold, the water inlet valve (PS734936) is usually the culprit. If water fills but no ice harvests (or the module doesn't cycle at all), replace the ice maker assembly (PS11738120). Valve is cheaper — start there."
+        },
+        {
+          "id": "qa-ps11738120-2",
+          "author": "Sarah K.",
+          "date": "2023-11-02",
+          "question": "Does this fit the WRS325SDHZ?",
+          "answer": "Yes — PS11738120 is compatible with the Whirlpool WRS325SDHZ side-by-side refrigerator. Make sure the bail arm is accessible before ordering."
+        }
+      ]
     },
     {
       "id": "part-ps734936",
@@ -272,9 +330,90 @@
       "partNumber": "PS11752778",
       "compatible": true,
       "note": "WRS325SDHZ is a Whirlpool side-by-side refrigerator that uses this door shelf bin. Snaps onto the molded rail on the inside of the door — no tools required."
+    },
+    {
+      "id": "compat-wrs325-ps11738120",
+      "model": "WRS325SDHZ",
+      "partNumber": "PS11738120",
+      "compatible": true,
+      "note": "PS11738120 is a direct-fit ice maker assembly for the Whirlpool WRS325SDHZ. Verify the bail arm location before starting — it's accessible from inside the freezer compartment."
+    },
+    {
+      "id": "compat-wrs325-ps734936",
+      "model": "WRS325SDHZ",
+      "partNumber": "PS734936",
+      "compatible": true,
+      "note": "The Whirlpool WRS325SDHZ uses this dual-inlet water valve for both the ice maker and the door water dispenser. Shut off the water supply before replacing."
+    },
+    {
+      "id": "compat-wdt780-ps11746240",
+      "model": "WDT780SAEM1",
+      "partNumber": "PS11746240",
+      "compatible": true,
+      "note": "PS11746240 is the OEM door latch assembly for the Whirlpool WDT780SAEM1 dishwasher. No special tools required beyond a T20 Torx bit for the inner panel screws."
     }
   ],
   "repairGuides": [
+    {
+      "id": "guide-water-dispenser",
+      "brand": "Whirlpool",
+      "appliance": "refrigerator",
+      "topic": "Water dispenser not working",
+      "steps": [
+        "Check that the water supply line behind the fridge is connected and the shutoff valve is fully open.",
+        "Inspect the water filter — a clogged filter is the most common cause of low or no water flow. Replace if it's been over 6 months.",
+        "Hold the dispenser lever for 10–15 seconds: if you hear the valve open (a click or hum) but nothing flows, the water inlet valve (PS734936) is likely faulty.",
+        "If no click at all, check the door switch — the dispenser won't activate unless the fridge door is fully closed."
+      ],
+      "matchIncludesAll": ["water dispenser"],
+      "matchFlexible": [
+        ["water dispenser", "water", "dispenser"],
+        ["not working", "no water", "stopped", "won't", "wont", "doesn't work", "not dispensing", "not coming out", "broken"]
+      ],
+      "likelyParts": ["PS734936"],
+      "commonQuestions": [
+        {
+          "id": "qa-guide-water-1",
+          "question": "Water trickles slowly but doesn't fully stop — is it the valve or the filter?",
+          "answer": "Slow trickle usually points to a partially clogged filter. Replace the filter first ($20–40) before ordering the valve ($55). If flow improves immediately after a new filter, that was the fix."
+        },
+        {
+          "id": "qa-guide-water-2",
+          "question": "Ice maker and water dispenser both stopped at the same time — what does that mean?",
+          "answer": "If both stop simultaneously, the water inlet valve (PS734936) is almost certainly the cause — it controls supply to both the ice maker fill tube and the dispenser line. Replace the valve."
+        }
+      ]
+    },
+    {
+      "id": "guide-dishwasher-wont-start",
+      "brand": "Whirlpool",
+      "appliance": "dishwasher",
+      "topic": "Dishwasher won't start",
+      "steps": [
+        "Make sure the door is fully latched — most dishwashers won't start if the door latch switch doesn't engage.",
+        "Check the control lock: hold the lock button for 3 seconds to disable child lock if the control panel is unresponsive.",
+        "Reset the dishwasher by cutting power at the breaker for 60 seconds, then restore and try a new cycle.",
+        "If the door clicks but the dishwasher still won't start, the door latch assembly (PS11746240) is likely faulty and needs replacement."
+      ],
+      "matchIncludesAll": ["dishwasher"],
+      "matchFlexible": [
+        ["won't start", "wont start", "not starting", "doesn't start", "no power", "won't turn on", "dead"],
+        ["dishwasher", "washer"]
+      ],
+      "likelyParts": ["PS11746240"],
+      "commonQuestions": [
+        {
+          "id": "qa-guide-dishwasher-1",
+          "question": "The dishwasher clicks when I close the door but still won't run — is that the latch?",
+          "answer": "A click usually means the mechanical latch is catching, but the electrical switch inside may have failed. The door latch assembly (PS11746240) includes both the mechanical latch and the microswitch — replacing the whole assembly is the standard fix."
+        },
+        {
+          "id": "qa-guide-dishwasher-2",
+          "question": "How long does the door latch replacement take?",
+          "answer": "Most customers finish in 20–30 minutes. You'll remove the inner door panel (T20 Torx screws along the top edge), unplug the wiring harness, swap the latch, and reassemble. No special skills required."
+        }
+      ]
+    },
     {
       "id": "guide-whirlpool-ice-maker",
       "brand": "Whirlpool",
@@ -285,10 +424,10 @@
         "Check the water supply valve behind the fridge and the fill tube for ice blockage.",
         "If still no ice, note any blinking pattern on the ice maker module (service manual) before replacing the ice maker assembly."
       ],
-      "matchIncludesAll": ["whirlpool", "ice maker"],
+      "matchIncludesAll": ["ice maker"],
       "matchFlexible": [
-        ["ice maker", "icemaker", "ice-maker"],
-        ["not working", "broken", "no ice", "fix", "stopped", "won't", "wont"]
+        ["ice maker", "icemaker", "ice-maker", "ice"],
+        ["not working", "broken", "no ice", "not making ice", "not making", "stopped making", "fix", "stopped", "won't", "wont", "doesn't work", "doesnt work"]
       ],
       "likelyParts": ["PS11738120", "PS734936"],
       "commonQuestions": [

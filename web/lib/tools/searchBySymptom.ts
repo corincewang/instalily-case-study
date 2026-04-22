@@ -22,6 +22,20 @@ export type SearchBySymptomResult =
  * Use this when the user describes a problem (e.g. "ice maker not working",
  * "door won't close") rather than naming a specific part.
  */
+/**
+ * Check whether every content word in `symptomPhrase` appears in `queryText`.
+ * This handles filler words like "is", "my", "the" that users naturally include
+ * but symptom phrases omit — e.g. "ice maker is not working" matches "ice maker not working".
+ */
+function symptomMatchesQuery(symptomPhrase: string, queryText: string): boolean {
+  // Exact substring first (fast path)
+  if (queryText.includes(symptomPhrase)) return true;
+  // Word-level: every word in the symptom appears somewhere in the query
+  const symWords = symptomPhrase.split(/\s+/).filter((w) => w.length > 1);
+  const qLower = queryText.toLowerCase();
+  return symWords.every((w) => qLower.includes(w));
+}
+
 export function searchBySymptomTool(input: {
   symptom: string;
 }): SearchBySymptomResult {
@@ -36,7 +50,7 @@ export function searchBySymptomTool(input: {
     if (!Array.isArray(syms)) continue;
     const matched = (syms as unknown[]).filter(
       (s): s is string =>
-        typeof s === "string" && s.length > 0 && lower.includes(s.toLowerCase())
+        typeof s === "string" && s.length > 0 && symptomMatchesQuery(s.toLowerCase(), lower)
     );
     if (matched.length === 0) continue;
     scored.push({
@@ -50,10 +64,7 @@ export function searchBySymptomTool(input: {
   }
 
   if (scored.length === 0) {
-    return {
-      ok: false,
-      error: `No parts matched the symptom "${q}". Try a more specific description like "ice maker not working" or "door won't latch".`,
-    };
+    return { ok: false, error: `No catalog parts matched the symptom "${q}".` };
   }
 
   scored.sort((a, b) => b.score - a.score);
