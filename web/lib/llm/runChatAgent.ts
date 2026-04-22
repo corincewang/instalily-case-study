@@ -8,13 +8,91 @@ import {
   GET_INSTALL_GUIDE_TOOL_NAME,
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
+  SEARCH_BY_SYMPTOM_TOOL_NAME,
 } from "../agentTools";
+import catalog from "../../data/catalog.json";
 import { formatCatalogReplyFromRetrieval } from "../formatCatalogReply";
 import type { Citation, SessionContext } from "../retrieveExact";
 import { retrieveExact } from "../retrieveExact";
 import { executePartselectTool } from "../toolExecutor";
 import { PARTSELECT_OPENAI_TOOLS } from "./openaiTools";
 import { PARTSELECT_AGENT_SYSTEM } from "./systemPrompt";
+
+type RetrievalResult = ReturnType<typeof retrieveExact>;
+
+function pushCite(citations: Citation[], c: Citation) {
+  if (!citations.some((x) => x.id === c.id)) citations.push(c);
+}
+
+/**
+ * Convert specific-tool outputs in the trace into a `retrieveExact`-compatible
+ * retrieval object using direct catalog lookups — no re-query of the full
+ * retrieval pipeline.
+ *
+ * Priority: lookup_part → get_install_guide → check_compatibility →
+ *           search_by_symptom. Returns null if no usable output was found.
+ */
+type CatalogPart = (typeof catalog.parts)[number];
+type CatalogCompat = (typeof catalog.compatibilities)[number];
+
+function buildRetrievalFromTrace(
+  trace: ToolTraceEntry[]
+): RetrievalResult | null {
+  const citations: Citation[] = [];
+  let part: CatalogPart | undefined;
+  let compatibility: CatalogCompat | undefined;
+
+  for (const entry of trace) {
+    if (!entry.ok) continue;
+
+    if (entry.name === LOOKUP_PART_TOOL_NAME) {
+      const o = entry.output as { ok?: boolean; part?: CatalogPart };
+      if (o?.ok && o.part) {
+        part ??= o.part;
+        pushCite(citations, { id: o.part.id, source: "part_catalog", label: "Part catalog" });
+      }
+    }
+
+    if (entry.name === GET_INSTALL_GUIDE_TOOL_NAME) {
+      const o = entry.output as { ok?: boolean; partNumber?: string };
+      if (o?.ok && o.partNumber && !part) {
+        part = (catalog.parts as CatalogPart[]).find(
+          (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
+        );
+        if (part) pushCite(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
+      }
+    }
+
+    if (entry.name === CHECK_COMPATIBILITY_TOOL_NAME) {
+      const o = entry.output as { ok?: boolean; rowId?: string; partNumber?: string };
+      if (o?.ok && o.rowId) {
+        compatibility ??= (catalog.compatibilities as CatalogCompat[]).find((r) => r.id === o.rowId);
+        if (compatibility) {
+          pushCite(citations, {
+            id: compatibility.id,
+            source: "compatibility_database",
+            label: "Compatibility database",
+          });
+        }
+        if (o.partNumber && !part) {
+          part = (catalog.parts as CatalogPart[]).find(
+            (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
+          );
+          if (part) pushCite(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
+        }
+      }
+    }
+
+    // search_by_symptom is intentionally NOT handled here.
+    // Symptom queries may also match a repairGuide (via matchIncludesAll in
+    // retrieveExact) which search_by_symptom doesn't cover. If the LLM only
+    // called search_by_symptom, buildRetrievalFromTrace returns null and we
+    // fall through to the full retrieveExact(userMessage) below.
+  }
+
+  if (!part && !compatibility) return null;
+  return { citations, part, compatibility };
+}
 
 /** A single turn in the conversation, as sent from the client. */
 export type HistoryTurn = {
@@ -95,7 +173,7 @@ export async function runChatWithLlmTools(
       if (tc.type !== "function") continue;
       const name = tc.function.name;
       const argsJson = tc.function.arguments ?? "{}";
-      const exec = executePartselectTool(name, argsJson);
+      const exec = executePartselectTool(name, argsJson, context);
       tool_trace.push({
         name: exec.name,
         ok: exec.ok,
@@ -119,40 +197,12 @@ export async function runChatWithLlmTools(
   }
 
   if (!lastRetrieval) {
-    // The LLM used a specific tool (lookup_part / check_compatibility / etc.) but
-    // never called catalog_search, so buildBlocksFromRetrieval has no input yet.
-    // Synthesise a retrieveExact-compatible result by re-running with a targeted
-    // query built from the specific tool's own output parameters.
-    let syntheticQuery = userMessage;
-
-    for (const entry of tool_trace) {
-      if (
-        (entry.name === LOOKUP_PART_TOOL_NAME ||
-          entry.name === GET_INSTALL_GUIDE_TOOL_NAME) &&
-        entry.ok
-      ) {
-        const o = entry.output as { ok?: boolean; partNumber?: string };
-        if (o?.ok && o.partNumber) {
-          syntheticQuery = o.partNumber;
-          break;
-        }
-      }
-      if (entry.name === CHECK_COMPATIBILITY_TOOL_NAME && entry.ok) {
-        const o = entry.output as {
-          ok?: boolean;
-          partNumber?: string;
-          model?: string;
-        };
-        if (o?.ok && o.partNumber && o.model) {
-          syntheticQuery = `${o.partNumber} ${o.model}`;
-          break;
-        }
-      }
-      // search_by_symptom: keep userMessage — it already triggers candidate
-      // retrieval in retrieveExact via the symptom/keyword path.
-    }
-
-    lastRetrieval = retrieveExact(syntheticQuery, context);
+    // The LLM called a specific tool but never called catalog_search.
+    // Build the retrieval object directly from the tool outputs — no re-query.
+    lastRetrieval =
+      buildRetrievalFromTrace(tool_trace) ??
+      // Ultimate fallback: user message had no useful tool output at all.
+      retrieveExact(userMessage, context);
     tool_trace.push({
       name: CATALOG_SEARCH_TOOL_NAME,
       ok: true,

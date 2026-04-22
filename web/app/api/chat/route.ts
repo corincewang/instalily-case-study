@@ -114,10 +114,10 @@ function extractContext(history: HistoryTurn[]): SessionContext {
       if (m.length > 0) partNumber = m[0][0].toUpperCase();
     }
     if (!model) {
-      // Model tokens are 8-15 alphanumeric chars with optional internal
-      // punctuation, e.g. WDT780SAEM1, WRS325SDHZ01. A rough heuristic.
-      const modelMatch = content.match(/\b([A-Z]{2,}[\d]{3,}[A-Z0-9]{2,})\b/i);
-      if (modelMatch) model = modelMatch[1].toUpperCase();
+      // Same regex as agentTools.ts extractModelToken — PS##### excluded.
+      const tokens = [...content.toUpperCase().matchAll(/\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/g)];
+      const hit = tokens.find((m) => !m[1].startsWith("PS"));
+      if (hit) model = hit[1];
     }
     if (partNumber && model) break;
   }

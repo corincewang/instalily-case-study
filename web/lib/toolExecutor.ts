@@ -6,7 +6,9 @@ import {
   NORMALIZE_PART_NUMBER_TOOL_NAME,
   SEARCH_BY_SYMPTOM_TOOL_NAME,
   type ToolName,
+  type ToolTraceEntry,
 } from "./agentTools";
+import type { SessionContext } from "./retrieveExact";
 import { retrieveExact } from "./retrieveExact";
 import { checkCompatibilityTool } from "./tools/checkCompatibility";
 import { getInstallGuideTool } from "./tools/getInstallGuide";
@@ -14,24 +16,22 @@ import { lookupPartTool } from "./tools/lookupPart";
 import { normalizePartNumberTool } from "./tools/normalizePartNumber";
 import { searchBySymptomTool } from "./tools/searchBySymptom";
 
-export type ToolExecutionResult = {
-  name: ToolName;
-  ok: boolean;
-  output?: unknown;
-};
+/** @deprecated Use ToolTraceEntry from agentTools instead. */
+export type ToolExecutionResult = ToolTraceEntry;
 
 /** 3-P1: limits so a runaway LLM call can't dump arbitrary-length payloads into tools. */
 const MAX_TEXT_LEN = 8000;
 const MAX_QUERY_LEN = 2000;
 
-function fail(name: ToolName, error: string, extra?: Record<string, unknown>): ToolExecutionResult {
+function fail(name: ToolName, error: string, extra?: Record<string, unknown>): ToolTraceEntry {
   return { name, ok: false, output: { error, ...extra } };
 }
 
 export function executePartselectTool(
   name: string,
-  argsJson: string
-): ToolExecutionResult {
+  argsJson: string,
+  context?: SessionContext
+): ToolTraceEntry {
   let args: unknown;
   try {
     args = argsJson ? JSON.parse(argsJson) : {};
@@ -76,7 +76,7 @@ export function executePartselectTool(
       return {
         name: CATALOG_SEARCH_TOOL_NAME,
         ok: true,
-        output: retrieveExact(query),
+        output: retrieveExact(query, context),
       };
     }
     case LOOKUP_PART_TOOL_NAME: {
