@@ -25,12 +25,28 @@ function pushCitation(citations: Citation[], c: Citation) {
   }
 }
 
+export type CandidatePart = {
+  part: CatalogShape["parts"][number];
+  matchedPhrases: string[];
+};
+
+export type SearchHit = {
+  part: CatalogShape["parts"][number];
+  /** Single phrase (keyword or appliance label) that justified the hit — echoed in the UI. */
+  matchedPhrase: string;
+};
+
 /**
- * 4-P1 hybrid retrieval (after 4-P0 exact PS hit):
- * 1) model compatibility (substring + collapsed spacing)
- * 2) strict repair guide phrases (`matchIncludesAll`)
- * 3) part keyword match on catalog `keywords`
- * 4) flexible symptom / phrase groups (`matchFlexible`)
+ * Hybrid retrieval:
+ * 1) exact PS number in message                                       (4-P0)
+ * 2) OEM / manufacturer part number substring                         (category 5)
+ * 3) supersession: old number listed in a part's `replaces[]`         (category 5)
+ * 4) model compatibility (substring + collapsed spacing)              (4-P1)
+ * 5) strict repair guide phrases (`matchIncludesAll`)
+ * 6) part keyword match on catalog `keywords`                         (4-P1)
+ * 7) flexible symptom / phrase groups (`matchFlexible`)               (4-P1)
+ * 8) symptom → candidate parts (ranked by phrase-hit count)           (category 6)
+ * 9) appliance / keyword browse (multi-result search)                 (category 4 browse)
  *
  * If a compatibility row hits but no PS was in the message, the linked part row is filled in.
  */
@@ -39,6 +55,8 @@ export function retrieveExact(userMessage: string): {
   part?: CatalogShape["parts"][number];
   compatibility?: CatalogShape["compatibilities"][number];
   guide?: CatalogShape["repairGuides"][number];
+  candidates?: CandidatePart[];
+  searchResults?: SearchHit[];
 } {
   const citations: Citation[] = [];
   const hay = userMessage;
@@ -61,6 +79,47 @@ export function retrieveExact(userMessage: string): {
       source: "part_catalog",
       label: "Part catalog",
     });
+  }
+
+  // Category 5: OEM / manufacturer part number match.
+  // Cheap and safe since OEM codes are ≥ 5 distinctive chars — substring is enough.
+  if (!part) {
+    for (const p of catalog.parts) {
+      const oem = (p as { manufacturerPartNumber?: string }).manufacturerPartNumber;
+      if (!oem || oem.length < 5) continue;
+      if (upper.includes(oem.toUpperCase())) {
+        part = p;
+        pushCitation(citations, {
+          id: p.id,
+          source: "part_catalog",
+          label: `Part catalog (OEM ${oem})`,
+        });
+        break;
+      }
+    }
+  }
+
+  // Category 5: supersession — user references an older number this part now replaces.
+  // PartSelect pages explicitly publish "This part replaces these: X, Y, Z", so real users
+  // will paste those in. Each `replaces[]` entry becomes an alternate retrieval key.
+  if (!part) {
+    for (const p of catalog.parts) {
+      const replaces = (p as { replaces?: string[] }).replaces;
+      if (!Array.isArray(replaces) || replaces.length === 0) continue;
+      const hitOld = replaces.find(
+        (old) =>
+          typeof old === "string" && old.length >= 5 && upper.includes(old.toUpperCase())
+      );
+      if (hitOld) {
+        part = p;
+        pushCitation(citations, {
+          id: p.id,
+          source: "part_catalog",
+          label: `Part catalog (supersedes ${hitOld})`,
+        });
+        break;
+      }
+    }
   }
 
   let compatibility: CatalogShape["compatibilities"][number] | undefined;
@@ -156,5 +215,82 @@ export function retrieveExact(userMessage: string): {
     }
   }
 
-  return { citations, part, compatibility, guide };
+  // Category 6: symptom → candidate parts (reverse diagnosis).
+  // Ranks every part by how many of its `symptoms[]` phrases appear in the user message,
+  // then keeps the top 3. Always computed when symptom phrases hit; downstream layer
+  // (buildBlocksFromRetrieval) decides whether to render as a "candidates" block.
+  const scored: CandidatePart[] = [];
+  for (const p of catalog.parts) {
+    const syms = (p as { symptoms?: string[] }).symptoms;
+    if (!Array.isArray(syms) || syms.length === 0) continue;
+    const matched = syms.filter(
+      (s) => typeof s === "string" && s.length > 0 && lower.includes(s.toLowerCase())
+    );
+    if (matched.length > 0) {
+      scored.push({ part: p, matchedPhrases: matched });
+    }
+  }
+  scored.sort((a, b) => b.matchedPhrases.length - a.matchedPhrases.length);
+  const candidates = scored.slice(0, 3);
+  for (const c of candidates) {
+    pushCitation(citations, {
+      id: c.part.id,
+      source: "part_catalog",
+      label: `Part catalog (symptom: "${c.matchedPhrases[0]}")`,
+    });
+  }
+
+  // Category 4 (browse): appliance + keyword search.
+  // Scores every part on (a) appliance-family mention in the query and (b) any catalog
+  // keyword substring hit. Keeps Top 3. This is the raw material for a multi-result browse
+  // card; downstream only renders it when intent === "search".
+  const applianceSignals: Array<{ token: string; canonical: string }> = [
+    { token: "dishwasher", canonical: "dishwasher" },
+    { token: "refrigerator", canonical: "refrigerator" },
+    { token: "fridge", canonical: "refrigerator" },
+  ];
+  const queryAppliance = applianceSignals.find((a) => lower.includes(a.token))?.canonical;
+
+  const searchScored: Array<{ part: CatalogShape["parts"][number]; score: number; phrase: string }> = [];
+  for (const p of catalog.parts) {
+    let score = 0;
+    let phrase = "";
+    if (queryAppliance && p.applianceFamily.toLowerCase() === queryAppliance) {
+      score += 1;
+      phrase = p.applianceFamily;
+    }
+    const keywords =
+      "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
+        ? (p as { keywords: string[] }).keywords
+        : [];
+    for (const k of keywords) {
+      if (typeof k !== "string" || k.length < 3) continue;
+      if (lower.includes(k.toLowerCase())) {
+        score += 2;
+        phrase = k;
+        break;
+      }
+    }
+    if (score > 0) searchScored.push({ part: p, score, phrase });
+  }
+  searchScored.sort((a, b) => b.score - a.score);
+  const searchResults: SearchHit[] = searchScored
+    .slice(0, 3)
+    .map((s) => ({ part: s.part, matchedPhrase: s.phrase }));
+  for (const s of searchResults) {
+    pushCitation(citations, {
+      id: s.part.id,
+      source: "part_catalog",
+      label: `Part catalog (search match: "${s.matchedPhrase}")`,
+    });
+  }
+
+  return {
+    citations,
+    part,
+    compatibility,
+    guide,
+    candidates: candidates.length > 0 ? candidates : undefined,
+    searchResults: searchResults.length > 0 ? searchResults : undefined,
+  };
 }

@@ -3,15 +3,259 @@
     {
       "id": "part-ps11752778",
       "partNumber": "PS11752778",
-      "title": "Lower rack wheel (case-study sample)",
+      "title": "Refrigerator Door Shelf Bin",
       "keywords": [
-        "lower rack",
-        "rack wheel",
-        "dishwasher rack",
-        "lower rack wheel"
+        "door shelf bin",
+        "door bin",
+        "lower door bin",
+        "refrigerator door shelf",
+        "gallon door bin",
+        "crisper cover support"
       ],
-      "installSteps": "1) Open the dishwasher and slide out the lower rack.\n2) Pry the old wheel off the rack axle with flat pliers.\n3) Press the new wheel onto the axle until it clicks.",
-      "applianceFamily": "dishwasher"
+      "symptoms": [
+        "cracked door bin",
+        "broken door shelf",
+        "door bin won't stay in",
+        "items falling out of door",
+        "yellowed door bin"
+      ],
+      "installSteps": "1) Open the refrigerator door and find the cracked or missing bin.\n2) Lift the old bin straight up off the molded rail on the inside of the door.\n3) Line the new bin up with the rail's tabs and push straight down until it seats — no tools required.",
+      "applianceFamily": "refrigerator",
+      "price": 44.62,
+      "currency": "USD",
+      "inStock": true,
+      "shipEta": "Ships today if ordered by 3 PM ET",
+      "rating": 4.8,
+      "reviewCount": 2416,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "WPW10321304",
+      "replaces": [
+        "AP6019471",
+        "W10321304",
+        "2171046",
+        "2171047",
+        "2198449",
+        "2198450",
+        "2304235"
+      ],
+      "relatedParts": ["PS11738120"],
+      "repairStories": [
+        {
+          "id": "story-ps11752778-1",
+          "title": "Cracked gallon bin — 30-second swap",
+          "body": "Our old bin had split down the side after years of holding a full gallon of milk. Popped the old one off the door rail, slid the new one on. Didn't even need to move anything else. Literally under a minute.",
+          "author": "Mike R.",
+          "location": "Denver, CO",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 142,
+          "helpfulTotal": 151
+        },
+        {
+          "id": "story-ps11752778-2",
+          "title": "Replaced two yellowed bins at once",
+          "body": "Both of our door bins had turned yellow and one was cracked. Ordered two. Hardest part was figuring out which direction the tabs seat — they only go on one way, so just line it up and push down firmly. Fridge instantly looks newer.",
+          "author": "Sandra L.",
+          "location": "Portland, OR",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 98,
+          "helpfulTotal": 104
+        },
+        {
+          "id": "story-ps11752778-3",
+          "title": "Fit perfectly on an older Kenmore",
+          "body": "Fridge is a Kenmore about 12 years old. Was nervous the new bin wouldn't fit, but it snapped right onto the door rail. Exact OEM match. Packaging was great too — no damage in shipping.",
+          "author": "Greg B.",
+          "location": "Nashville, TN",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 67,
+          "helpfulTotal": 71
+        },
+        {
+          "id": "story-ps11752778-4",
+          "title": "Kid broke it, I fixed it",
+          "body": "My daughter yanked on the door bin and cracked the end off. Thought I'd have to call a repair tech. Turned out I could just lift the old one off and drop the new one on. Felt like a hero for about 20 seconds.",
+          "author": "Priya S.",
+          "location": "Chicago, IL",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 54,
+          "helpfulTotal": 56
+        },
+        {
+          "id": "story-ps11752778-5",
+          "title": "Fix for one bin, precaution for the other",
+          "body": "The bottom bin cracked so I replaced it. Figured the top bin was the same age and would go soon — bought a second as a spare. Took the whole project 5 minutes. Glad I didn't wait for it to fail mid-grocery-haul.",
+          "author": "Ravi K.",
+          "location": "Seattle, WA",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 41,
+          "helpfulTotal": 43
+        },
+        {
+          "id": "story-ps11752778-6",
+          "title": "Matched our fridge exactly",
+          "body": "Side-by-side Whirlpool. The replacement bin was identical to what came out — same dimensions, same tab pattern, same clear plastic. No ambiguity, no comparison needed. Took maybe 10 seconds to install once it was out of the box.",
+          "author": "Tom H.",
+          "location": "Austin, TX",
+          "difficulty": "Really Easy",
+          "timeLabel": "Less than 15 mins",
+          "toolsUsed": [],
+          "otherPartsUsed": [],
+          "helpfulYes": 33,
+          "helpfulTotal": 34
+        }
+      ],
+      "questions": [
+        {
+          "id": "qa-ps11752778-1",
+          "author": "Derek",
+          "date": "2023-03-04",
+          "question": "Will this bin fit a Kenmore side-by-side or is it Whirlpool-only?",
+          "answer": "PS11752778 is a Whirlpool part (OEM WPW10321304) and is used across several Whirlpool-family brands — Whirlpool, Kenmore, KitchenAid, and some Amana models share this exact bin. Always double-check with your model number before ordering.",
+          "helpfulCount": 124
+        },
+        {
+          "id": "qa-ps11752778-2",
+          "author": "Jenna P.",
+          "date": "2022-08-12",
+          "model": "WRS325SDHZ",
+          "question": "Do I need any tools to swap the old bin out?",
+          "answer": "No tools required. Open the refrigerator door, lift the damaged bin straight up off the molded rail, then line the new bin up with the tabs and push down until it seats. The whole swap is usually under a minute.",
+          "helpfulCount": 96
+        },
+        {
+          "id": "qa-ps11752778-3",
+          "author": "Emma",
+          "date": "2023-11-09",
+          "question": "My old bin is yellowed but not cracked — is the new one clear?",
+          "answer": "Yes, the replacement is a new clear plastic bin. Yellowing is a cosmetic age effect on the original bin; the replacement ships clear and stays clear for years under normal use.",
+          "helpfulCount": 58
+        },
+        {
+          "id": "qa-ps11752778-4",
+          "author": "Alicia",
+          "date": "2022-05-22",
+          "question": "One of the molded tabs on my door rail snapped off — will the bin still stay in?",
+          "answer": "The bin relies on multiple tabs for support, so one missing tab usually still holds. If two or more tabs are broken, the bin will sag under a full gallon — at that point the door liner itself may need replacing, not just the bin.",
+          "helpfulCount": 44
+        },
+        {
+          "id": "qa-ps11752778-5",
+          "author": "Marcus",
+          "date": "2023-06-18",
+          "question": "What's the difference between PS11752778 and the older part numbers like 2198449?",
+          "answer": "They're the same physical part. 2198449 (and 2171046, 2171047, 2198450, etc.) are older Whirlpool part numbers that have all been superseded by WPW10321304 / PS11752778. Ordering PS11752778 will get you the current-production version of the same bin.",
+          "helpfulCount": 39
+        },
+        {
+          "id": "qa-ps11752778-6",
+          "author": "Lisa C.",
+          "date": "2024-01-02",
+          "question": "Will this fit my WDT780SAEM1?",
+          "answer": "No — WDT780SAEM1 is a dishwasher model number, and PS11752778 is a refrigerator door bin. You'd want to search using your refrigerator's model number (usually on a sticker inside the fridge, along the left wall or ceiling).",
+          "helpfulCount": 27
+        }
+      ]
+    },
+    {
+      "id": "part-ps11738120",
+      "partNumber": "PS11738120",
+      "title": "Refrigerator Ice Maker Assembly",
+      "keywords": [
+        "ice maker assembly",
+        "icemaker module",
+        "ice maker unit"
+      ],
+      "symptoms": [
+        "ice maker not working",
+        "no ice",
+        "not making ice",
+        "ice maker broken"
+      ],
+      "installSteps": "1) Unplug the refrigerator and remove the ice maker cover.\n2) Disconnect the wiring harness and unscrew the assembly.\n3) Mount the new assembly, reconnect the harness, restore power.",
+      "applianceFamily": "refrigerator",
+      "price": 128.45,
+      "currency": "USD",
+      "inStock": true,
+      "shipEta": "Ships today if ordered by 3 PM ET",
+      "rating": 4.6,
+      "reviewCount": 247,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10712394",
+      "replaces": ["AP6023703", "W10190961"],
+      "relatedParts": ["PS734936"],
+      "repairStories": [],
+      "questions": []
+    },
+    {
+      "id": "part-ps734936",
+      "partNumber": "PS734936",
+      "title": "Refrigerator Water Inlet Valve",
+      "keywords": [
+        "water inlet valve",
+        "inlet valve"
+      ],
+      "symptoms": [
+        "ice maker not working",
+        "water dispenser not working",
+        "no water to ice maker"
+      ],
+      "installSteps": "1) Shut off the water supply and unplug the refrigerator.\n2) Disconnect the inlet tubes and wiring harness from the valve.\n3) Mount the new valve, reconnect tubes + harness, restore water and power.",
+      "applianceFamily": "refrigerator",
+      "price": 54.90,
+      "currency": "USD",
+      "inStock": true,
+      "shipEta": "Ships today if ordered by 3 PM ET",
+      "rating": 4.5,
+      "reviewCount": 89,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10408179",
+      "replaces": ["AP5983848"],
+      "relatedParts": ["PS11738120"],
+      "repairStories": [],
+      "questions": []
+    },
+    {
+      "id": "part-ps11746240",
+      "partNumber": "PS11746240",
+      "title": "Dishwasher Door Latch",
+      "keywords": [
+        "door latch",
+        "dishwasher latch"
+      ],
+      "symptoms": [
+        "dishwasher won't start",
+        "door won't close",
+        "door won't latch"
+      ],
+      "installSteps": "1) Remove the inner door panel screws along the top edge.\n2) Unplug the latch wiring harness and swap in the new latch.\n3) Reinstall the inner panel and test the door switch.",
+      "applianceFamily": "dishwasher",
+      "price": 58.20,
+      "currency": "USD",
+      "inStock": true,
+      "shipEta": "Ships today if ordered by 3 PM ET",
+      "rating": 4.7,
+      "reviewCount": 63,
+      "manufacturer": "Whirlpool",
+      "manufacturerPartNumber": "W10619006",
+      "replaces": ["AP5985208"],
+      "relatedParts": [],
+      "repairStories": [],
+      "questions": []
     }
   ],
   "compatibilities": [
@@ -19,8 +263,15 @@
       "id": "compat-wdt780-ps11752778",
       "model": "WDT780SAEM1",
       "partNumber": "PS11752778",
+      "compatible": false,
+      "note": "WDT780SAEM1 is a Whirlpool dishwasher model; PS11752778 is a refrigerator door shelf bin. Different appliance — not compatible. Please search with your refrigerator's model number instead."
+    },
+    {
+      "id": "compat-wrs325-ps11752778",
+      "model": "WRS325SDHZ",
+      "partNumber": "PS11752778",
       "compatible": true,
-      "note": "Sample row for case study: this model is treated as compatible with PS11752778 in our static catalog."
+      "note": "WRS325SDHZ is a Whirlpool side-by-side refrigerator that uses this door shelf bin. Snaps onto the molded rail on the inside of the door — no tools required."
     }
   ],
   "repairGuides": [
@@ -38,6 +289,19 @@
       "matchFlexible": [
         ["ice maker", "icemaker", "ice-maker"],
         ["not working", "broken", "no ice", "fix", "stopped", "won't", "wont"]
+      ],
+      "likelyParts": ["PS11738120", "PS734936"],
+      "commonQuestions": [
+        {
+          "id": "qa-guide-icemaker-1",
+          "question": "Ice maker clicks but no ice comes out — where do I start?",
+          "answer": "Clicking without fill usually points to the water inlet valve (PS734936). Clicking WITH fill but no harvest points to the ice maker module (PS11738120). Check the fill tube for ice blockage first — that's the cheapest fix."
+        },
+        {
+          "id": "qa-guide-icemaker-2",
+          "question": "Is it worth replacing the whole assembly or just the module?",
+          "answer": "For most Whirlpool top-freezer / French-door models, the assembly (PS11738120) is sold as a complete unit — module, mold, and thermostat together. Replacing just the module is not typically a consumer repair."
+        }
       ]
     }
   ]

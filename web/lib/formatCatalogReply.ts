@@ -2,15 +2,33 @@ import { retrieveExact } from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
 
+function partCommerceSnippet(part: NonNullable<Retrieval["part"]>): string {
+  const p = part as unknown as Record<string, unknown>;
+  const bits: string[] = [];
+  if (typeof p.price === "number") {
+    const currency = typeof p.currency === "string" ? p.currency : "USD";
+    const priceText = currency === "USD" ? `$${p.price.toFixed(2)}` : `${p.price.toFixed(2)} ${currency}`;
+    bits.push(priceText);
+  }
+  if (typeof p.inStock === "boolean") {
+    bits.push(p.inStock ? "in stock" : "out of stock");
+  }
+  return bits.length > 0 ? ` (${bits.join(" · ")})` : "";
+}
+
 /**
  * Fallback reply when the LLM returns no final text.
  * Short prose only; cards carry catalog layout; chips carry next steps.
  */
 export function formatCatalogReplyFromRetrieval(
   retrieval: Retrieval,
-  userPreview: string
+  userPreview: string,
+  clarifyQuestion?: string
 ): string {
   const { part, compatibility, guide } = retrieval;
+  if (clarifyQuestion && !part && !compatibility && !guide) {
+    return clarifyQuestion;
+  }
   if (!part && !compatibility && !guide) {
     return (
       "I couldn’t match that to our sample catalog. Double-check the part or model number, or try a different wording. " +
@@ -28,7 +46,7 @@ export function formatCatalogReplyFromRetrieval(
 
   if (part && !compatibility && !guide) {
     return (
-      `**${part.partNumber}** matches our sample listing for what you asked. ` +
+      `**${part.partNumber}**${partCommerceSnippet(part)} matches our sample listing for what you asked. ` +
       "Specs and install text are in the part card below; chips suggest logical next steps."
     );
   }
@@ -42,7 +60,7 @@ export function formatCatalogReplyFromRetrieval(
 
   if (part && compatibility && !guide) {
     return (
-      `We matched **${part.partNumber}** and a compatibility note for model **${compatibility.model}**. ` +
+      `We matched **${part.partNumber}**${partCommerceSnippet(part)} and a compatibility note for model **${compatibility.model}**. ` +
       "Details are in the cards below; use the chips for your next step."
     );
   }
