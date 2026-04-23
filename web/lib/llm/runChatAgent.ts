@@ -13,9 +13,13 @@ import {
   SEMANTIC_SEARCH_TOOL_NAME,
 } from "../agentTools";
 import catalog from "../../data/catalog.json";
-import { formatCatalogReplyFromRetrieval } from "../formatCatalogReply";
+import { formatCatalogReplyFromRetrieval, formatMissingCompatPairReply } from "../formatCatalogReply";
 import type { Citation, SessionContext } from "../retrieveExact";
-import { allowSessionCarryForRetrieval, retrieveExact } from "../retrieveExact";
+import {
+  allowSessionCarryForRetrieval,
+  modelTokenInCurrentMessage,
+  retrieveExact,
+} from "../retrieveExact";
 import { fetchPartPageTool } from "../tools/fetchPartPage";
 import { semanticSearchTool } from "../tools/semanticSearch";
 import { executePartselectTool } from "../toolExecutor";
@@ -173,6 +177,9 @@ export type LlmChatResult = {
 
 const MAX_TOOL_ROUNDS = 6;
 
+/** Cap prior turns sent to the model — the route still scans full `history` for session anchors. */
+const MAX_PRIOR_CHAT_MESSAGES = 40;
+
 /** Shared setup: parse args, build messages, run the tool loop. */
 async function runToolLoop(
   userMessage: string,
@@ -187,8 +194,17 @@ async function runToolLoop(
   normalized: Set<string>;
   lastRetrieval: ReturnType<typeof retrieveExact>;
 }> {
+  const prior = history
+    .slice(-MAX_PRIOR_CHAT_MESSAGES)
+    .map(
+      (t): ChatCompletionMessageParam => ({
+        role: t.role,
+        content: t.content,
+      })
+    );
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: systemContent },
+    ...prior,
     { role: "user", content: userMessage },
   ];
 
@@ -336,6 +352,31 @@ function applyCompatAskModelMismatchGuard(
   );
 }
 
+function isBareModelOnlyMessage(msg: string): boolean {
+  const t = msg.trim();
+  if (t.length < 6 || t.length > 24) return false;
+  return /^[A-Z]{2,}\d{2,}[A-Z0-9-]*$/i.test(t);
+}
+
+/**
+ * Part is known (often from session) and the user pasted a model, but there is no
+ * compatibility row in the demo catalog — replace vague "can't confirm" LLM copy.
+ */
+function applyMissingCompatPairGuard(
+  replyText: string,
+  retrieval: ReturnType<typeof retrieveExact>,
+  userMessage: string
+): string {
+  if (!retrieval.part || retrieval.compatibility) return replyText;
+  if (!modelTokenInCurrentMessage(userMessage)) return replyText;
+  const uncertain =
+    /\b(couldn.?t confirm|could not confirm|can.?t confirm|unable to confirm|not able to confirm|couldn.?t\s+(verify|tell)|can.?t\s+(verify|tell)|not sure|verify on partselect)\b/i.test(
+      replyText
+    );
+  if (!isBareModelOnlyMessage(userMessage) && !uncertain) return replyText;
+  return formatMissingCompatPairReply(retrieval.part.partNumber);
+}
+
 function applyRetrievalReplyGuards(
   replyText: string,
   retrieval: ReturnType<typeof retrieveExact>,
@@ -344,6 +385,7 @@ function applyRetrievalReplyGuards(
 ): string {
   let out = applyConsistencyGuard(replyText, retrieval, userMessage);
   out = applyCompatAskModelMismatchGuard(out, retrieval, userMessage, sessionContext);
+  out = applyMissingCompatPairGuard(out, retrieval, userMessage);
   return out;
 }
 

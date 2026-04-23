@@ -93,32 +93,81 @@ function parseHistory(raw: unknown): HistoryTurn[] {
 
 const PS_TOKEN_RE = /\bPS\d{5,}\b/gi;
 
+function firstPsFromContent(content: string): string | undefined {
+  const m = [...content.matchAll(PS_TOKEN_RE)];
+  return m.length > 0 ? m[0][0].toUpperCase() : undefined;
+}
+
 /**
- * Walk the history backwards to find the most recently mentioned PS number and
- * model token. These become the `SessionContext` that lets retrieveExact carry
- * values forward without the user repeating themselves.
+ * OEM / supersession-style tokens that often appear in assistant card copy.
+ * They must not steal the session "model" slot from a real appliance model the
+ * user typed (e.g. WDT780SAEM1) when we scan newest-first across turns.
+ */
+function looksLikeOemOrSupersessionToken(tok: string): boolean {
+  const u = tok.toUpperCase();
+  if (/^WP[A-Z0-9]{4,}$/.test(u)) return true;
+  if (/^AP\d{6,}$/.test(u)) return true;
+  if (/^W\d{5}[A-Z0-9]*$/i.test(u) && u.length <= 12) return true;
+  return false;
+}
+
+function firstModelTokenFromContent(content: string): string | undefined {
+  const tokens = [...content.toUpperCase().matchAll(/\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/g)].map(
+    (x) => x[1]
+  );
+  const nonPs = tokens.filter((t) => !t.startsWith("PS"));
+  const prefer = nonPs.find((t) => !looksLikeOemOrSupersessionToken(t));
+  if (prefer) return prefer;
+  return nonPs[0];
+}
+
+/**
+ * Walk the history to find the most recently mentioned PS number and model token.
+ * These become the `SessionContext` for `retrieveExact` carry-forward.
  *
- * Heuristic: look through assistant and user turns alike — the agent may have
- * confirmed a part number in its own reply.
+ * - **User turns first (newest → oldest)** for both anchors so the assistant's
+ *   latest card dump (full of OEM codes) does not overwrite the user's model.
+ * - **Appliance model preferred over OEM-shaped tokens** within a single message.
  */
 function extractContext(history: HistoryTurn[]): SessionContext {
   let partNumber: string | undefined;
-  let model: string | undefined;
-
-  // Scan newest-first so we pick up the most recent resolved values.
   for (let i = history.length - 1; i >= 0; i--) {
-    const { content } = history[i];
-    if (!partNumber) {
-      const m = [...content.matchAll(PS_TOKEN_RE)];
-      if (m.length > 0) partNumber = m[0][0].toUpperCase();
+    if (history[i].role !== "user") continue;
+    const p = firstPsFromContent(history[i].content);
+    if (p) {
+      partNumber = p;
+      break;
     }
-    if (!model) {
-      // Same regex as agentTools.ts extractModelToken — PS##### excluded.
-      const tokens = [...content.toUpperCase().matchAll(/\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/g)];
-      const hit = tokens.find((m) => !m[1].startsWith("PS"));
-      if (hit) model = hit[1];
+  }
+  if (!partNumber) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role !== "assistant") continue;
+      const p = firstPsFromContent(history[i].content);
+      if (p) {
+        partNumber = p;
+        break;
+      }
     }
-    if (partNumber && model) break;
+  }
+
+  let model: string | undefined;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role !== "user") continue;
+    const m = firstModelTokenFromContent(history[i].content);
+    if (m) {
+      model = m;
+      break;
+    }
+  }
+  if (!model) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role !== "assistant") continue;
+      const m = firstModelTokenFromContent(history[i].content);
+      if (m) {
+        model = m;
+        break;
+      }
+    }
   }
 
   return { partNumber, model };

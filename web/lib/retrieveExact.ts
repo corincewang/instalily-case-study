@@ -15,12 +15,20 @@ const PS_IN_MESSAGE_RE = /\bPS\d{5,}\b/i;
  * Non–part-number appliance model tokens in the *current* message (e.g. WRS325SDHZ).
  * PS numbers are excluded — those are resolved via the PS loop above.
  */
-function modelTokenInCurrentMessage(hay: string): boolean {
+export function modelTokenInCurrentMessage(hay: string): boolean {
   const upper = hay.toUpperCase();
   for (const m of upper.matchAll(/\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/g)) {
     if (!/^PS\d/i.test(m[1])) return true;
   }
   return false;
+}
+
+/** Model tags that have a compatibility row for this PS in the local catalog (demo subset). */
+export function documentedCompatModelsForPartNumber(partNumber: string): string[] {
+  const u = partNumber.toUpperCase();
+  return (catalog.compatibilities as Array<{ partNumber: string; model: string }>)
+    .filter((r) => r.partNumber.toUpperCase() === u)
+    .map((r) => r.model);
 }
 
 /**

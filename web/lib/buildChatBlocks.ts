@@ -1,5 +1,6 @@
 import {
   allowSessionCarryForRetrieval,
+  documentedCompatModelsForPartNumber,
   isProceduralPartsChatHelpMessage,
   retrieveExact,
 } from "./retrieveExact";
@@ -639,6 +640,8 @@ export function detectClarification(
         };
       }
       if (hasPart && !hasModel) {
+        const docModels = documentedCompatModelsForPartNumber(r.part!.partNumber);
+        const exampleModel = docModels[0] ?? "WRS325SDHZ";
         return {
           reason: "need_model",
           title: "Which model?",
@@ -646,7 +649,7 @@ export function detectClarification(
           question:
             "What's your appliance model number? I need it to check whether this part fits your fridge or dishwasher.",
           hints: [
-            "Example: Is this compatible with WDT780SAEM1?",
+            `Example: Is this compatible with ${exampleModel}?`,
             "The model tag is usually inside the door or behind the kickplate.",
           ],
         };

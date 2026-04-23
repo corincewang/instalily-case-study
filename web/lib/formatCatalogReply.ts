@@ -1,9 +1,26 @@
 import { isVaguePartsShoppingOpener } from "./buildChatBlocks";
-import { retrieveExact } from "./retrieveExact";
+import { documentedCompatModelsForPartNumber, retrieveExact } from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
 type Part = NonNullable<Retrieval["part"]>;
 type Candidate = NonNullable<Retrieval["candidates"]>[number];
+
+/**
+ * User supplied a model (often as a follow-up) but the demo catalog has no PS↔model row.
+ * Keeps the story honest: we are data-limited, not "forgetting" the model.
+ */
+export function formatMissingCompatPairReply(partNumber: string): string {
+  const docs = documentedCompatModelsForPartNumber(partNumber);
+  const docLine =
+    docs.length > 0
+      ? ` In this demo file, **${partNumber}** only has documented fit rows for: ${docs.map((m) => `**${m}**`).join(", ")}.`
+      : "";
+  return (
+    `I have the model you sent, but **this local catalog does not include a compatibility row** for **${partNumber}** with that model, so there is no catalog-backed yes/no here.` +
+    docLine +
+    " Please confirm fit on PartSelect before ordering."
+  );
+}
 
 function priceSnippet(part: Part): string {
   const p = part as unknown as Record<string, unknown>;
