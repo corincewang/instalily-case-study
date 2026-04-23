@@ -370,6 +370,22 @@ const cases = [
     },
   },
   {
+    name: "Glossary: what is model number -> deterministic reply (no LLM refusal)",
+    message: "what is model number",
+    check: (r) => {
+      assert.equal(r.used_llm, false, "expected glossary path used_llm=false");
+      assert.equal((r.blocks ?? []).length, 0, "glossary should not render blocks");
+      assert.ok(
+        /model number|compatibility|tag|sticker|kick\s*panel|door frame/i.test(r.reply),
+        `reply should define model number / where to find it; got: ${r.reply}`
+      );
+      assert.ok(
+        !/\b(sorry|outside my scope|only help with)\b/i.test(r.reply),
+        `reply should not be a scope refusal; got: ${r.reply}`
+      );
+    },
+  },
+  {
     name: "Vague repair -> clarify asks for brand/symptom",
     message: "Fix my dishwasher",
     check: (r) => {

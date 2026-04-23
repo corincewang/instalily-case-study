@@ -58,6 +58,22 @@ export function allowSessionCarryForRetrieval(hay: string, lower: string): boole
   return false;
 }
 
+/**
+ * The user is asking how to use this chat (what to paste / type), not requesting a
+ * catalog browse. Such lines often still say "refrigerator or dishwasher part" for
+ * scope — without this guard, {@link retrieveExact} keyword browse matches the
+ * appliance word and surfaces arbitrary "top 3" parts.
+ */
+export function isProceduralPartsChatHelpMessage(userMessage: string): boolean {
+  const m = userMessage.toLowerCase();
+  if (/\bwhat should i (paste|type|send|enter|put)\b/.test(m)) return true;
+  if (/\bwhat (do|should) i (paste|send|type|enter|put)\b/.test(m)) return true;
+  if (/\bhow (do|should) i (paste|send|share|tell you|format|write)\b/.test(m)) return true;
+  if (/\bwhere (do|should) i (paste|put|enter|type)\b/.test(m)) return true;
+  if (/have a partselect part number.*what should i paste/i.test(userMessage)) return true;
+  return false;
+}
+
 function normalizeModelToken(s: string) {
   return s.trim().toUpperCase();
 }
@@ -275,13 +291,30 @@ export function retrieveExact(
   }
 
   // 4-P1: fill missing part via catalog keywords (substring).
+  // Do not pin a single `part` row on bare appliance-family tokens ("dishwasher" appears in
+  // many keyword lists) — that spuriously sets session-facing `part` and surfaces unrelated
+  // "Price & stock" chips on vague symptom lines like "why my dishwasher don't work".
+  const BARE_APPLIANCE_KEYWORD = new Set([
+    "dishwasher",
+    "dishwashers",
+    "refrigerator",
+    "refrigerators",
+    "fridge",
+    "fridges",
+  ]);
   if (!part) {
     for (const p of catalog.parts) {
       const keywords =
         "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
           ? (p as { keywords: string[] }).keywords
           : [];
-      if (keywords.some((k) => lower.includes(String(k).toLowerCase()))) {
+      const hit = keywords.find((k) => {
+        if (typeof k !== "string" || k.length < 3) return false;
+        const kl = k.toLowerCase();
+        if (BARE_APPLIANCE_KEYWORD.has(kl)) return false;
+        return lower.includes(kl);
+      });
+      if (hit) {
         part = p;
         pushCitation(citations, {
           id: p.id,
@@ -342,45 +375,48 @@ export function retrieveExact(
   // Scores every part on (a) appliance-family mention in the query and (b) any catalog
   // keyword substring hit. Keeps Top 3. This is the raw material for a multi-result browse
   // card; downstream only renders it when intent === "search".
-  const applianceSignals: Array<{ token: string; canonical: string }> = [
-    { token: "dishwasher", canonical: "dishwasher" },
-    { token: "refrigerator", canonical: "refrigerator" },
-    { token: "fridge", canonical: "refrigerator" },
-  ];
-  const queryAppliance = applianceSignals.find((a) => lower.includes(a.token))?.canonical;
+  let searchResults: SearchHit[] = [];
+  if (!isProceduralPartsChatHelpMessage(hay)) {
+    const applianceSignals: Array<{ token: string; canonical: string }> = [
+      { token: "dishwasher", canonical: "dishwasher" },
+      { token: "refrigerator", canonical: "refrigerator" },
+      { token: "fridge", canonical: "refrigerator" },
+    ];
+    const queryAppliance = applianceSignals.find((a) => lower.includes(a.token))?.canonical;
 
-  const searchScored: Array<{ part: CatalogShape["parts"][number]; score: number; phrase: string }> = [];
-  for (const p of catalog.parts) {
-    let score = 0;
-    let phrase = "";
-    if (queryAppliance && p.applianceFamily.toLowerCase() === queryAppliance) {
-      score += 1;
-      phrase = p.applianceFamily;
-    }
-    const keywords =
-      "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
-        ? (p as { keywords: string[] }).keywords
-        : [];
-    for (const k of keywords) {
-      if (typeof k !== "string" || k.length < 3) continue;
-      if (lower.includes(k.toLowerCase())) {
-        score += 2;
-        phrase = k;
-        break;
+    const searchScored: Array<{ part: CatalogShape["parts"][number]; score: number; phrase: string }> = [];
+    for (const p of catalog.parts) {
+      let score = 0;
+      let phrase = "";
+      if (queryAppliance && p.applianceFamily.toLowerCase() === queryAppliance) {
+        score += 1;
+        phrase = p.applianceFamily;
       }
+      const keywords =
+        "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
+          ? (p as { keywords: string[] }).keywords
+          : [];
+      for (const k of keywords) {
+        if (typeof k !== "string" || k.length < 3) continue;
+        if (lower.includes(k.toLowerCase())) {
+          score += 2;
+          phrase = k;
+          break;
+        }
+      }
+      if (score > 0) searchScored.push({ part: p, score, phrase });
     }
-    if (score > 0) searchScored.push({ part: p, score, phrase });
-  }
-  searchScored.sort((a, b) => b.score - a.score);
-  const searchResults: SearchHit[] = searchScored
-    .slice(0, 3)
-    .map((s) => ({ part: s.part, matchedPhrase: s.phrase }));
-  for (const s of searchResults) {
-    pushCitation(citations, {
-      id: s.part.id,
-      source: "part_catalog",
-      label: `Part catalog (search match: "${s.matchedPhrase}")`,
-    });
+    searchScored.sort((a, b) => b.score - a.score);
+    searchResults = searchScored
+      .slice(0, 3)
+      .map((s) => ({ part: s.part, matchedPhrase: s.phrase }));
+    for (const s of searchResults) {
+      pushCitation(citations, {
+        id: s.part.id,
+        source: "part_catalog",
+        label: `Part catalog (search match: "${s.matchedPhrase}")`,
+      });
+    }
   }
 
   // A compatibility verdict answers a different question than a symptom repair guide.

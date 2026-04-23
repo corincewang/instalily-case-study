@@ -196,11 +196,17 @@ export async function POST(request: Request) {
         blocks: [],
         citations: [],
         suggested_actions: [
-          { id: "co-find", label: "Find part by PS", prompt: "Find part PS11752778" },
+          {
+            id: "co-find",
+            label: "Look up a part",
+            prompt:
+              "I want to look up a refrigerator or dishwasher part. I have a PartSelect part number—what should I paste here?",
+          },
           {
             id: "co-compat",
             label: "Check compatibility",
-            prompt: "Is PS11752778 compatible with WRS325SDHZ?",
+            prompt:
+              "I need to check if a part fits my fridge or dishwasher. I have the part number and my appliance model number.",
           },
           {
             id: "co-symptom",
@@ -239,6 +245,15 @@ export async function POST(request: Request) {
         "You can search by OEM number on PartSelect and it will map to the correct PS number automatically.",
     },
     {
+      pattern:
+        /\bwhat(?:'s|\s+is)\s+(?:a|an|the|my)?\s*model\s*(?:number|#|code)?\b|\bwhat\s+does\s+(?:a|the|my)?\s*model\s*number\s+mean\b/i,
+      reply:
+        "A model number identifies your whole appliance (the specific fridge or dishwasher you own), not an individual part. " +
+        "Manufacturers use a short code — often letters and digits like WDT780SAEM1 or WRS325SDHZ — so support and parts databases know exactly which machine you have. " +
+        "You need it for compatibility checks: a PS part number is the part itself; the model number is the appliance it might fit. " +
+        "Look for a sticker or metal tag: on refrigerators it's often on an inside wall, ceiling liner, or door frame; on dishwashers, open the door and check the door frame, tub edge, or behind the lower kick panel.",
+    },
+    {
       pattern: /\b(speak|talk|connect|chat)\s+(to|with)\s+a?\s*(human|person|agent|representative|rep|someone)\b/i,
       reply:
         "I'm a virtual assistant — I can't connect you directly to a live agent from this chat window. " +
@@ -261,8 +276,18 @@ export async function POST(request: Request) {
           blocks: [],
           citations: [],
           suggested_actions: [
-            { id: "g-find", label: "Find a part by PS number", prompt: "Find part PS11752778" },
-            { id: "g-compat", label: "Check compatibility", prompt: "Is PS11752778 compatible with WRS325SDHZ?" },
+            {
+              id: "g-find",
+              label: "Look up a part",
+              prompt:
+                "I want to look up a refrigerator or dishwasher part. I have a PartSelect part number—what should I paste here?",
+            },
+            {
+              id: "g-compat",
+              label: "Check compatibility",
+              prompt:
+                "I need to check if a part fits my fridge or dishwasher. I have the part number and my appliance model number.",
+            },
           ],
           no_evidence: true,
           normalized_part_numbers: [],

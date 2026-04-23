@@ -295,6 +295,58 @@ function applyConsistencyGuard(
     : replyText;
 }
 
+/** True when the assistant text asks for a model number despite a compatibility verdict existing. */
+function replyImpliesNeedModelNumber(reply: string): boolean {
+  return (
+    /\b(need|what'?s|what is|share|tell me|give me).{0,55}\b(appliance\s+)?model\b/i.test(reply) ||
+    /\bmodel number\b.{0,25}\b(first|before|to proceed|to check)\b/i.test(reply) ||
+    /\bI need your.{0,35}\bmodel\b/i.test(reply) ||
+    /\bbefore I can check.{0,45}\bmodel\b/i.test(reply) ||
+    /\bcan check that.{0,55}\bmodel\b/i.test(reply)
+  );
+}
+
+/**
+ * When `check_compatibility` already produced a row but the model still asks for a model,
+ * replace with copy that points at the card and avoids repeating the raw model token in prose.
+ */
+function applyCompatAskModelMismatchGuard(
+  replyText: string,
+  retrieval: ReturnType<typeof retrieveExact>,
+  userMessage: string,
+  sessionContext: SessionContext | undefined
+): string {
+  if (!retrieval.compatibility || !replyImpliesNeedModelNumber(replyText)) {
+    return replyText;
+  }
+  const c = retrieval.compatibility;
+  const pn = retrieval.part?.partNumber ?? c.partNumber;
+  const verdict = c.compatible ? "compatible" : "not compatible";
+  const hasSessionModel = !!sessionContext?.model?.trim();
+  const deicticModel =
+    /\b(my|this|the)\s+model\b/i.test(userMessage) ||
+    /\b(that|same)\s+appliance\b/i.test(userMessage);
+  const opener =
+    hasSessionModel || deicticModel
+      ? `I'm using the appliance model we already established in this chat for that check — the exact tag is on the compatibility card. `
+      : `The compatibility card already shows the model tag and verdict for this check. `;
+  return (
+    `${opener}` +
+    `**${pn}** is **${verdict}** with that appliance; see the card below for the full breakdown.`
+  );
+}
+
+function applyRetrievalReplyGuards(
+  replyText: string,
+  retrieval: ReturnType<typeof retrieveExact>,
+  userMessage: string,
+  sessionContext: SessionContext | undefined
+): string {
+  let out = applyConsistencyGuard(replyText, retrieval, userMessage);
+  out = applyCompatAskModelMismatchGuard(out, retrieval, userMessage, sessionContext);
+  return out;
+}
+
 export async function runChatWithLlmTools(
   userMessage: string,
   history: HistoryTurn[] = [],
@@ -326,7 +378,7 @@ export async function runChatWithLlmTools(
   }
 
   if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
-  replyText = applyConsistencyGuard(replyText, lastRetrieval, userMessage);
+  replyText = applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context);
 
   return {
     reply: replyText,
@@ -389,7 +441,7 @@ export async function streamChatWithLlmTools(
   }
 
   if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
-  replyText = applyConsistencyGuard(replyText, lastRetrieval, userMessage);
+  replyText = applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context);
 
   // If the guard overrode the reply, the tokens already sent were wrong — that's
   // a rare edge case; we accept it and let the client reconcile via the `done` event.

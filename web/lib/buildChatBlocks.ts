@@ -1,4 +1,8 @@
-import { allowSessionCarryForRetrieval, retrieveExact } from "./retrieveExact";
+import {
+  allowSessionCarryForRetrieval,
+  isProceduralPartsChatHelpMessage,
+  retrieveExact,
+} from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
 
@@ -108,6 +112,7 @@ export type ChatIntent =
  */
 export function classifyIntent(userMessage: string): ChatIntent {
   const m = userMessage.toLowerCase();
+  if (isProceduralPartsChatHelpMessage(userMessage)) return "generic";
   // OEM / supersession lookup intent. Checked before `install` because "replacement" /
   // "replaces" are ambiguous on their own; the stronger phrases ("old part", "supersedes",
   // "oem", "what's the ps for …") should pull us here instead of into install-step rendering.
@@ -141,7 +146,7 @@ export function classifyIntent(userMessage: string): ChatIntent {
     return "install";
   }
   if (
-    /\b(not working|isn'?t|is not|won'?t|wont|doesn'?t|broken|leak|leaking|fix|repair|troubleshoot|no ice|stopped|makes noise|grinding|clogged)\b/.test(
+    /\b(not working|not work|don'?t work|doesn'?t work|isn'?t|is not|won'?t|wont|doesn'?t|broken|leak|leaking|fix|repair|troubleshoot|no ice|stopped|makes noise|grinding|clogged)\b/.test(
       m
     )
   ) {
@@ -598,7 +603,7 @@ function hasStrongRepairSymptom(userMessage: string): boolean {
   if (/\bwater\s+dispenser\b/.test(m)) return true;
   return (
     /\b(dishwasher|fridge|refrigerator)\b/.test(m) &&
-    /\b(not working|won'?t|wont|doesn'?t|broken|leak|leaking|start|drain|fix|repair|stopped)\b/.test(
+    /\b(not working|not work|don'?t work|doesn'?t work|won'?t|wont|doesn'?t|broken|leak|leaking|start|drain|fix|repair|stopped)\b/.test(
       m
     )
   );
@@ -727,7 +732,7 @@ export function detectClarification(
         question:
           "Which part are you looking for? You can share a PS number, an OEM code, a part name, or describe what's broken.",
         hints: [
-          "Example: Find part PS11752778",
+          "Example: I have a PartSelect part number to look up",
           "Example: Show me refrigerator door bin parts",
           "Example: I need a dishwasher door latch",
           "Example: What is a PS number?",
@@ -766,6 +771,7 @@ const IN_SCOPE_SIGNAL_RE = new RegExp(
       "refrigerators?",
       "fridges?",
       "dishwashers?",
+      "model numbers?",
       "ice ?makers?",
       "water dispensers?",
       "water filters?",
@@ -911,8 +917,8 @@ export function buildOutOfScopeReplyFromRetrieval(
   return {
     reply,
     hints: [
-      "How do I install PS11752778?",
-      "Is PS11752778 compatible with WDT780SAEM1?",
+      "How do I install a part once I have the PartSelect number?",
+      "Can you check compatibility if I paste the part number and my model number?",
       "My Whirlpool fridge ice maker isn't working",
     ],
     reason: oos.reason,
@@ -934,8 +940,8 @@ export function buildClarifyReplyFromRetrieval(
       reply:
         "Sure — tell me the refrigerator or dishwasher model number, or the part number if you have it, and I'll help find the right part.",
       hints: [
-        "Find part PS11752778",
-        "Is PS11752778 compatible with WDT780SAEM1?",
+        "I want to look up a part — I have the PartSelect part number",
+        "I need to check compatibility — I have the part number and model number",
         "The ice maker on my Whirlpool fridge is not working",
       ],
     };
@@ -1005,7 +1011,7 @@ export function buildBlocksFromRetrieval(
     case "search":
       // ≥2 hits → multi-result list card; exactly 1 → fall through to a product card
       // (same UX as "Find a lower rack wheel" today); 0 → no block.
-      if (!vagueOpener) {
+      if (!vagueOpener && !isProceduralPartsChatHelpMessage(userMessage)) {
         if (r.searchResults && r.searchResults.length >= 2) {
           if (
             shouldRenderProductCard(userMessage, intent) ||
@@ -1072,11 +1078,17 @@ export function buildSuggestedActionsFromRetrieval(
   }
 
   if (isConversationOnlyTurn(userMessage)) {
-    push({ id: "co-find", label: "Find part by PS", prompt: "Find part PS11752778" });
+    push({
+      id: "co-find",
+      label: "Look up a part",
+      prompt:
+        "I want to look up a refrigerator or dishwasher part. I have a PartSelect part number—what should I paste here?",
+    });
     push({
       id: "co-compat",
       label: "Check compatibility",
-      prompt: "Is PS11752778 compatible with WRS325SDHZ?",
+      prompt:
+        "I need to check if a part fits my fridge or dishwasher. I have the part number and my appliance model number.",
     });
     push({
       id: "co-symptom",
@@ -1194,7 +1206,11 @@ export function buildSuggestedActionsFromRetrieval(
       }
       break;
     case "search":
-      if (r.searchResults && r.searchResults.length > 0) {
+      if (
+        !isProceduralPartsChatHelpMessage(userMessage) &&
+        r.searchResults &&
+        r.searchResults.length > 0
+      ) {
         for (const hit of r.searchResults) {
           const ps = hit.part.partNumber;
           push({

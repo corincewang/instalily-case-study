@@ -90,6 +90,19 @@ type ChatMessage = {
   suggested_actions?: SuggestedAction[];
 };
 
+/** Browser-local demo state (chat + cart). Bump `v` if the shape changes. */
+const LS_DEMO_STATE_KEY = "partselect-demo-state-v1";
+
+function isChatMessage(x: unknown): x is ChatMessage {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    (o.role === "user" || o.role === "assistant") &&
+    typeof o.content === "string"
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatPrice(p?: number, currency?: string): string | null {
@@ -485,6 +498,22 @@ const QUICK_ACTIONS = [
   { label: "Find a part",                               text: "I want to find a part" },
 ] as const;
 
+function buildWelcomeMessages(): ChatMessage[] {
+  return [
+    {
+      id: "welcome",
+      role: "assistant",
+      content:
+        "Tell me what's wrong with your fridge or dishwasher and I'll help you find the right part, check if it fits your model, and walk you through the repair.",
+      suggested_actions: QUICK_ACTIONS.map((a) => ({
+        id: a.label,
+        label: a.label,
+        prompt: a.text,
+      })),
+    },
+  ];
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 // ─── Cart types ───────────────────────────────────────────────────────────────
@@ -498,7 +527,34 @@ type CartItem = {
   qty: number;
 };
 
+function isCartItem(x: unknown): x is CartItem {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.id === "string" &&
+    typeof o.partNumber === "string" &&
+    typeof o.title === "string" &&
+    typeof o.qty === "number" &&
+    (o.price === undefined || typeof o.price === "number")
+  );
+}
+
 // ─── Cart (shared body + sidebar / mobile drawer) ───────────────────────────
+
+/** Shopping cart glyph — PartSelect-style teal `#337788` (same as product cards). */
+function CartShelfIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden
+    >
+      <path d="M2.25 2.25a.75.75 0 0 0 0 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 0 0-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 0 0 0-1.5H5.378A2.25 2.25 0 0 1 7.5 15h11.218a.75.75 0 0 0 .674-.421 60.358 60.358 0 0 0 2.96-7.228.75.75 0 0 0-.525-.965A60.864 60.864 0 0 0 5.68 4.509l-.232-.867A1.875 1.875 0 0 0 3.636 2.25H2.25ZM3.75 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM16.5 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" />
+    </svg>
+  );
+}
 
 function CartContents({
   items,
@@ -601,14 +657,16 @@ function CartSidebar({
     <aside className="hidden min-h-0 w-72 shrink-0 flex-col border-r border-zinc-200 bg-white md:flex">
       <div className="shrink-0 border-b border-zinc-200 px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900">Your cart</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <CartShelfIcon className="h-4 w-4 shrink-0 text-[#337788]" />
+            <h2 className="text-sm font-semibold text-zinc-900">Your cart</h2>
+          </div>
           {totalQty > 0 && (
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
               {totalQty} {totalQty === 1 ? "item" : "items"}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-xs text-zinc-500">Local demo — not synced with PartSelect</p>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <CartContents items={items} onRemove={onRemove} onQtyChange={onQtyChange} />
@@ -636,7 +694,10 @@ function CartDrawer({
       />
       <div className="fixed right-0 top-0 z-50 flex h-full w-[min(100%,20rem)] flex-col bg-white shadow-2xl md:hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-zinc-900">Your cart</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <CartShelfIcon className="h-4 w-4 shrink-0 text-[#337788]" />
+            <h2 className="text-sm font-semibold text-zinc-900">Your cart</h2>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -679,6 +740,7 @@ export default function Home() {
   const [toast, setToast] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   function addToCart(block: ProductBlock) {
     setCartItems((prev) => {
@@ -702,19 +764,7 @@ export default function Home() {
     setToast(`Added to cart: ${block.title}`);
   }
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Tell me what's wrong with your fridge or dishwasher and I'll help you find the right part, check if it fits your model, and walk you through the repair.",
-      suggested_actions: QUICK_ACTIONS.map((a) => ({
-        id: a.label,
-        label: a.label,
-        prompt: a.text,
-      })),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => buildWelcomeMessages());
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -722,6 +772,37 @@ export default function Home() {
   const [streamingId, setStreamingId] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_DEMO_STATE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as { v?: number; messages?: unknown[]; cart?: unknown[] };
+        if (Array.isArray(data.messages) && data.messages.length > 0 && data.messages.every(isChatMessage)) {
+          setMessages(data.messages as ChatMessage[]);
+        }
+        if (Array.isArray(data.cart) && data.cart.every(isCartItem)) {
+          setCartItems(data.cart as CartItem[]);
+        }
+      }
+    } catch {
+      /* ignore corrupt storage */
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (streamingId !== null) return;
+    try {
+      localStorage.setItem(
+        LS_DEMO_STATE_KEY,
+        JSON.stringify({ v: 1, messages, cart: cartItems })
+      );
+    } catch {
+      /* quota / private mode */
+    }
+  }, [messages, cartItems, hydrated, streamingId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -822,6 +903,13 @@ export default function Home() {
     }
   }
 
+  function clearConversation() {
+    if (loading || streamingId) return;
+    setMessages(buildWelcomeMessages());
+    setError(null);
+    setDraft("");
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 text-zinc-900 md:flex-row">
       <CartSidebar
@@ -844,7 +932,15 @@ export default function Home() {
               <h1 className="text-sm font-semibold leading-tight text-zinc-900">PartSelect Assistant</h1>
               <p className="text-xs text-zinc-500">Refrigerator &amp; dishwasher parts</p>
             </div>
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={clearConversation}
+                disabled={loading || !!streamingId}
+                className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-600 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Clear chat
+              </button>
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 <span className="text-xs text-zinc-500">Online</span>
@@ -852,12 +948,10 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setCartOpen(true)}
-                className="relative rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 md:hidden"
+                className="relative rounded-lg p-1.5 text-[#337788] hover:bg-zinc-100 hover:text-[#2b6575] md:hidden"
                 aria-label="Open cart"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                  <path d="M2.25 2.25a.75.75 0 0 0 0 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 0 0-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 0 0 0-1.5H5.378A2.25 2.25 0 0 1 7.5 15h11.218a.75.75 0 0 0 .674-.421 60.358 60.358 0 0 0 2.96-7.228.75.75 0 0 0-.525-.965A60.864 60.864 0 0 0 5.68 4.509l-.232-.867A1.875 1.875 0 0 0 3.636 2.25H2.25ZM3.75 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM16.5 20.25a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" />
-                </svg>
+                <CartShelfIcon className="h-5 w-5" />
                 {cartItems.length > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#337788] px-0.5 text-[10px] font-bold text-white">
                     {cartItems.reduce((s, i) => s + i.qty, 0)}

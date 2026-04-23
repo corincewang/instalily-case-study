@@ -46,7 +46,7 @@ export function formatCatalogReplyFromRetrieval(
   if (compatibility && !part && !guide) {
     const verdict = compatibility.compatible ? "compatible" : "not compatible";
     const reason = (compatibility as unknown as Record<string, unknown>).note as string | undefined;
-    const base = `**${compatibility.partNumber}** is **${verdict}** with model **${compatibility.model}**.`;
+    const base = `**${compatibility.partNumber}** is **${verdict}** with the appliance on the compatibility card below.`;
     return reason ? `${base} ${reason}` : base;
   }
 
@@ -106,8 +106,7 @@ export function formatCatalogReplyFromRetrieval(
   if (part && compatibility) {
     const verdict = compatibility.compatible ? "fits" : "does not fit";
     const pn = (part as unknown as Record<string, unknown>).partNumber as string;
-    const model = (compatibility as unknown as Record<string, unknown>).model as string;
-    return `**${pn}**${priceSnippet(part)} **${verdict}** model **${model}**. Details are in the cards below.`;
+    return `**${pn}**${priceSnippet(part)} **${verdict}** the appliance shown on the compatibility card. Details are in the cards below.`;
   }
 
   // Fallback
