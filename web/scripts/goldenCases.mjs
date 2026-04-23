@@ -22,11 +22,26 @@ async function ask(message, history = []) {
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: ${body}`);
   }
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw new Error(`Non-JSON body: ${body.slice(0, 200)}`);
+  /** NDJSON stream: token/replace lines, then one `done` object (same contract as the web client). */
+  let reply = "";
+  let lastDone = null;
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    let ev;
+    try {
+      ev = JSON.parse(t);
+    } catch {
+      continue;
+    }
+    if (ev.type === "token" && typeof ev.text === "string") reply += ev.text;
+    if (ev.type === "replace" && typeof ev.text === "string") reply = ev.text;
+    if (ev.type === "done") lastDone = ev;
   }
+  if (!lastDone) {
+    throw new Error(`No "done" event in stream: ${body.slice(0, 200)}`);
+  }
+  return { ...lastDone, reply };
 }
 
 /**
@@ -51,13 +66,8 @@ function citationIds(r) {
 function blockTypes(r) {
   return Array.isArray(r.blocks) ? r.blocks.map((b) => b.type) : [];
 }
-/**
- * When the LLM is active (`used_llm === true`), assert that at least one
- * tool_trace entry has the expected tool name. Skipped silently on the
- * deterministic path (no LLM key) so the golden suite still passes in CI.
- */
+/** Assert that at least one tool_trace entry has the expected tool name. */
 function assertToolUsed(r, toolName, caseName) {
-  if (!r.used_llm) return; // deterministic path: new tools not invoked
   const names = (r.tool_trace ?? []).map((t) => t.name);
   assert.ok(
     names.includes(toolName),
@@ -494,6 +504,26 @@ const multiTurnCases = [
       assert.ok(
         support.verdict && support.verdict.tone === "ok",
         `WRS325SDHZ + PS11752778 should be compatible; got ${JSON.stringify(support.verdict)}`
+      );
+    },
+  },
+  {
+    name: "[multi-turn] Part price then symptom — no compat/product from stale PS",
+    turns: [
+      "How much is PS11752778?",
+      "My Whirlpool fridge ice maker isn't working",
+    ],
+    check: (r) => {
+      const supportKinds = (r.blocks ?? [])
+        .filter((b) => b.type === "support")
+        .map((b) => b.kind);
+      assert.ok(
+        !supportKinds.includes("compat"),
+        `symptom turn should not show compat; support kinds=${JSON.stringify(supportKinds)}`
+      );
+      assert.ok(
+        !(r.blocks ?? []).some((b) => b.type === "product" && b.ps === "PS11752778"),
+        "symptom turn should not surface product card for PS from prior turn only"
       );
     },
   },

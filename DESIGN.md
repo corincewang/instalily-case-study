@@ -2,7 +2,7 @@
 
 ## Summary
 
-This is a **domain-scoped** assistant for **refrigerator and dishwasher parts** only. The server exposes a **streaming chat API** (NDJSON over `fetch`, not SSE) that either runs a **tool-calling LLM** when `OPENAI_API_KEY` is set or a **fully deterministic** path when it is not. Structured answers (price, compatibility, install steps, cards) are always grounded in **`retrieveExact` + `catalog.json`**; fuzzy “customer experience” questions can optionally use **`semantic_search`** over precomputed embeddings. The UI is a single-page chat with **product / support cards**, **suggested chips**, and **sticky chrome** so scrolling stays inside the message pane.
+This is a **domain-scoped** assistant for **refrigerator and dishwasher parts** only. The server exposes a **streaming chat API** (NDJSON over `fetch`, not SSE) that either runs a **tool-calling LLM** when `OPENAI_API_KEY` is set or a **fully deterministic** path when it is not. Structured answers (price, compatibility, install steps, cards) are always grounded in **`retrieveExact` + `catalog.json`**; fuzzy “customer experience” questions can optionally use **`semantic_search`** over precomputed embeddings. The UI is a single-page layout: **chat** (product / support cards, suggested chips, sticky chrome so only the transcript scrolls) plus a **left mock cart** for a simple customer transaction demo tied to “Add to cart” on product cards.
 
 ---
 
@@ -24,59 +24,58 @@ This is a **domain-scoped** assistant for **refrigerator and dishwasher parts** 
 | Local `catalog.json` + optional scraped PDP fields | Other appliance categories (washers, HVAC, …) unless clearly refused |
 | Live **read-only** fetch of PartSelect HTML for gaps (`fetch_part_page`, part images) | Official PartSelect API (none public); scraping must stay polite / ToS-aware in production |
 
-**Boundary enforcement** is layered (system prompt → deterministic OOS gate → `no_evidence` + citation alignment). The LLM cannot widen scope by prompt alone; see **Session and scope** below.
+**Boundary enforcement** is layered (system prompt → deterministic OOS gate → `no_evidence` + citation alignment). The LLM cannot widen scope by prompt alone; see **Session and scope** below and **Agentic architecture** for session memory.
 
 ---
 
 ## Design decisions and tradeoffs
 
-Design choices are grouped along four axes: **interface**, **agentic architecture**, **extensibility & scalability**, and **queries** (routing + retrieval).
+**Cross-cutting (applies to every axis):** two architecture choices that sit above any single layer.
+
+| Design point | Tradeoff / rationale |
+| ------------ | -------------------- |
+| **Server-built blocks (stable, grounded UI payloads)** | `buildBlocksFromRetrieval` assembles `product` / `support` blocks from `retrieveExact` and tool-backed retrieval. The model streams natural language; I **do not** rely on the LLM emitting parse-perfect JSON for card payloads, so the UI stays deterministic and testable. |
+| **Stable `POST /api/chat` JSON contract** | After NDJSON `token` / `replace` lines, the terminal **`done`** object always carries the same shape: `reply`, `blocks`, `citations`, `suggested_actions`, `tool_trace`, `no_evidence`, etc. Frontends, mocks, and golden tests can assert on fields without guessing schema drift. |
 
 ### Interface (client + HTTP contract)
 
 | Design point | Tradeoff / rationale |
 | ------------ | -------------------- |
-| **NDJSON stream** (`token` → optional `replace` → `done`) | **Pro:** Works with `POST` + JSON body (history, message). **Con:** No browser `EventSource`; client must parse lines and handle backpressure manually. SSE was rejected because `EventSource` cannot send a request body. |
-| **Single `ReadableStream` close in `finally`** | Ensures the client always sees stream end so UI state (e.g. “typing”) clears; omitting `controller.close()` wedges the UI. |
-| **`h-dvh` + `min-h-0` on flex children** | Locks layout to the viewport so only the message list scrolls; avoids whole-page scroll hiding the header. **Con:** Requires discipline on nested flex (classic `min-height: auto` trap). |
-| **Cards + chips** (`product` / `support` blocks + `suggested_actions`) | Structured UI for catalog-backed answers; chips only for **actionable** next prompts, not free-text tips (see Clarify UX). |
-| **`GET /api/part-image/[ps]`** for thumbnails / install video | Server-side fetch avoids client CORS/WAF issues; **Con:** Couples availability to PartSelect HTML shape; cache is in-process only (resets on deploy). |
+| **Stream replies as newline-delimited JSON over POST (not SSE)** | I need the request body to carry message + history; `EventSource` can’t do that cleanly. Downside: the client parses each line itself instead of using a built-in SSE helper. |
+| **Show answers as cards plus short “what next?” chips** | Cards hold structured catalog data (part, install, compat); chips are tap-to-send follow-ups. Clarify flows keep real tips in the reply text so they aren’t mistaken for buttons. |
+| **Left sidebar mock cart for a lightweight “transaction” story** | A fixed **cart** column (drawer on small viewports) holds **browser-local** lines only—qty, line subtotal, thumbnails via `/api/part-image`—so I can demo add-to-cart → review → jump to PartSelect checkout without pretending the real PartSelect cart API exists. |
 
 ### Agentic architecture
 
 | Design point | Tradeoff / rationale |
 | ------------ | -------------------- |
-| **Tool loop (≤ 6 rounds)** with `tool_choice: "auto"` | Lets the model chain normalize → lookup/compat/symptom → fallback `catalog_search`. **Con:** Latency stacks with rounds; cap prevents runaway cost. |
-| **`buildRetrievalFromTrace`** after specific tools | Avoids re-querying the full catalog when the LLM never called `catalog_search`; **Con:** must keep trace → `Retrieval` mapping in sync when adding tools. |
-| **Async tools** (`fetch_part_page`, `semantic_search`) in the loop | Network + embedding calls handled like other side effects; sync `executePartselectTool` stays pure for the rest. |
-| **Reply consistency guard** (`formatCatalogReplyFromRetrieval` when LLM claims “no match” but blocks exist) | Prevents contradictory UX; **Con:** rare case where streamed tokens disagree with final `replace` — client handles `replace`. |
-| **Dual path: LLM vs no-key deterministic** | Same golden tests and similar UX without vendor lock-in for local runs. **Con:** Two code paths to maintain; feature parity skews toward LLM path for streaming/RAG. |
+| **Let the model call tools in a loop, with a hard round cap** | It can chain “normalize text → look up part → check fit” like a human. More rounds mean more latency and cost, so we stop after a small fixed maximum. |
+| **Treat the local catalog as the source of truth for what appears on screen** | Tool results plus `retrieveExact` fill a retrieval object; cards and citations come from that. The model explains — it shouldn’t invent PS numbers, prices, or compatibility verdicts. |
+| **One main path for real catalog answers (OpenAI tools + streaming)** | Easier to maintain than two divergent pipelines. Tradeoff: no API key means catalog turns return **503**; lightweight routes (hello, glossary, hard refusal) still run without the model. |
+| **Session memory for multi-turn tools and retrieval** | Each `POST` includes `history`. I scan newest-first for the latest **PS** and **appliance model** token, pass them as `SessionContext` into `retrieveExact`, and add a **one-line session note** to the system prompt so the agent does not re-parse the whole thread for anchors. **`allowSessionCarryForRetrieval`** only merges that PS/model when the *current* message still reads like install, price, fit, or names a part—so a fresh symptom question does not inherit an unrelated compat or product row. |
 
 ### Extensibility and scalability
 
 | Design point | Tradeoff / rationale |
 | ------------ | -------------------- |
-| **`catalog.json` as the “database”** | Zero ops, easy diff/review for a case study. **Con:** No concurrent writes, no partial updates; swap for SQLite/Postgres when you need multi-tenant or writes. |
-| **`retrieveExact` as single structured retrieval API** | One place to add indexes, caching, or SQL later. **Con:** Grows monolithic until you split by intent behind the same facade. |
-| **File-backed `embeddings.json` + in-memory cosine search** | No Pinecone/pgvector for hundreds of chunks. **Con:** O(n) per query; move to ANN index when n ≫ 10⁴. |
-| **One-off `scrape-parts.mjs` + `generate-embeddings.mjs`** | Reproducible data refresh in CI or locally. **Con:** Requires API key for embeddings; scraper must rate-limit (sleep between PDPs). |
-| **`buildBlocksFromRetrieval` stable contract** | UI and API stay decoupled from whether the LLM ran; add new block types without changing the stream envelope beyond `done.blocks`. |
+| **Keep the dataset in `catalog.json`** | Great for a demo I can diff in Git; not a production database — no concurrent writes, and I’d replace it if the product grew. |
+| **Put all “match this message to catalog rows” logic in `retrieveExact`** | One place to read when adding a signal; later I could swap innards (SQL, cache) without changing what the UI expects. |
+| **Optional RAG: `semantic_search` on a small embedding file + in-memory cosine** | Lightweight **RAG** over curated text chunks (`embeddings.json`); no hosted vector DB. Fine for hundreds of chunks at O(n) cosine; if content explodes, I’d move to an approximate nearest-neighbor index. |
 
-### Queries (six intent categories + overrides)
+### Queries (six query categories)
 
-These buckets drive **which card** renders, **which chips** appear, and the **reply override** order when no catalog block is shown.
+I split traffic into **six top-level categories**. The **system prompt** and routing heuristics steer the **agent toward the right tools** for each category; **`classifyIntent`** + **`buildBlocksFromRetrieval`** then pick the **card** shape (`product` / `support` kinds) from the merged retrieval.
 
-| # | Category | Typical intent | Primary output |
-|---|----------|----------------|----------------|
-| **1** | Install (PS) | “How do I install PS…?” | `support` · `kind: install` |
-| **2** | Compatibility | “Does PS… fit WRS…?” | `support` · `kind: compat` |
-| **3** | Symptom | “Ice maker not working” → repair steps and/or reverse-diagnosis candidates | `support` · `kind: repair` and/or `candidates` |
-| **4** | Part lookup / browse | OEM, supersession, multi-hit search | `product` and/or `candidates` |
-| **5** | Out-of-scope | Wrong appliance / generic chat | Refusal reply + chips; **no** block |
-| **6** | Clarify | Missing model, missing PS, etc. | Question reply + example chips; **tips in prose**, not chips |
+| # | Category | What the user is usually doing | Tools the agent leans on (typical) | Primary UI |
+|---|----------|--------------------------------|-------------------------------------|------------|
+| **1** | **Install** | “How do I install / replace PS…?” | `get_install_guide`, `lookup_part`, `normalize_part_number` | `support` · `kind: install` |
+| **2** | **Compatibility** | “Does this part fit model …?” | `check_compatibility`, `normalize_part_number`, `lookup_part` | `support` · `kind: compat` |
+| **3** | **Symptom / repair** | Ice maker, leak, noise, not draining, etc. | `search_by_symptom`, `catalog_search` | `support` · `kind: repair` and/or `candidates` |
+| **4** | **Part lookup & browse** | PS/OEM, supersession, “show fridge parts” | `lookup_part`, `normalize_part_number`, `catalog_search` | `product` and/or `candidates` |
+| **5** | **Out-of-scope** | Wrong appliance or off-topic | *(no catalog tools)* — refusal copy + chips | **No** block |
+| **6** | **Clarify** | Missing model, PS, or symptom detail | Optional `normalize_part_number`; mostly dialog | Question + example chips; **no** block |
 
-**Override order (no block):** **(5) OOS** → **(6) clarify** → deterministic “no match” copy.  
-*(An older internal comment listed a seventh “reserved” slot for removed order-support; it is intentionally omitted here.)*
+**When no block is rendered:** out-of-scope refusal → missing-field clarify → generic “no match” copy. *Implementation detail:* `buildChatBlocks.ts` uses a few extra intent labels (`buy`, `oem`, `diagnose`, `search`, `generic`) under the hood; they fold into the rows above for cards and chips.
 
 ---
 
@@ -96,8 +95,6 @@ These buckets drive **which card** renders, **which chips** appear, and the **re
 ---
 
 ## Session and scope
-
-**Session memory** — The client sends prior turns each request. The route **regex-scans** history (newest first) for the latest PS number and model token and injects a **one-line session note** into the system prompt so the model does not re-read full history for anchors.
 
 **Scope layers (outer → inner):**
 

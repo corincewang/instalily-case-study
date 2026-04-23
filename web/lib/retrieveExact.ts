@@ -9,6 +9,54 @@ export type Citation = {
 type CatalogShape = typeof catalog;
 
 const PS_RE = /\bPS\d{5,}\b/gi;
+const PS_IN_MESSAGE_RE = /\bPS\d{5,}\b/i;
+
+/**
+ * Non–part-number appliance model tokens in the *current* message (e.g. WRS325SDHZ).
+ * PS numbers are excluded — those are resolved via the PS loop above.
+ */
+function modelTokenInCurrentMessage(hay: string): boolean {
+  const upper = hay.toUpperCase();
+  for (const m of upper.matchAll(/\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/g)) {
+    if (!/^PS\d/i.test(m[1])) return true;
+  }
+  return false;
+}
+
+/**
+ * When false, do not merge `context.partNumber` / `context.model` into this turn's retrieval.
+ * Prevents a new symptom question from inheriting a PS/model from an unrelated prior turn.
+ */
+export function allowSessionCarryForRetrieval(hay: string, lower: string): boolean {
+  if (PS_IN_MESSAGE_RE.test(hay)) return true;
+  if (modelTokenInCurrentMessage(hay)) return true;
+  if (
+    /\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/.test(lower)
+  ) {
+    return true;
+  }
+  if (
+    /\b(install|installation|installing|how do i (put|fit|install)|steps to|instruction|replace|replacement)\b/.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(price|cost|how much|in stock|out of stock|stock|ship|shipping|rating|review|reviews)\b/.test(
+      lower
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(which part|what parts?|parts? (do i need|needed|for|to replace))\b/.test(lower)
+  ) {
+    return true;
+  }
+  if (/\b(oem|manufacturer|replaces|supersed)\b/.test(lower)) return true;
+  return false;
+}
 
 function normalizeModelToken(s: string) {
   return s.trim().toUpperCase();
@@ -64,7 +112,9 @@ export type SessionContext = {
  * If a compatibility row hits but no PS was in the message, the linked part row is filled in.
  *
  * `context` carries resolved values from prior turns so a clarify→answer pair
- * works without the user repeating themselves.
+ * works without the user repeating themselves. Session fields are merged only when
+ * {@link allowSessionCarryForRetrieval} is true for this message (compat/install/price
+ * language, PS/model in the current text, etc.) — not on unrelated symptom turns.
  */
 export function retrieveExact(
   userMessage: string,
@@ -82,6 +132,7 @@ export function retrieveExact(
   const upper = hay.toUpperCase();
   const lower = hay.toLowerCase();
   const collapsedHay = collapseModelToken(hay);
+  const allowCarry = allowSessionCarryForRetrieval(hay, lower);
 
   let part: CatalogShape["parts"][number] | undefined;
   for (const m of hay.matchAll(PS_RE)) {
@@ -145,7 +196,7 @@ export function retrieveExact(
   // If the current message didn't resolve a part on its own but a prior turn did,
   // seed `part` from the context so the user doesn't have to repeat themselves.
   // Example: "How do I install it?" after agent already knows the PS number.
-  if (!part && context?.partNumber) {
+  if (!part && context?.partNumber && allowCarry) {
     const carried = catalog.parts.find(
       (p) => p.partNumber.toUpperCase() === context.partNumber!.toUpperCase()
     );
@@ -159,10 +210,9 @@ export function retrieveExact(
     }
   }
 
-  // Build an augmented haystack that also includes the context model token so
-  // the compat search below can match even when the current message doesn't
-  // repeat the model number.
-  const contextModelToken = context?.model ?? "";
+  // Augment compat matching with the session model only when this turn clearly
+  // continues a compat / install / commerce thread (or already names a model/PS).
+  const contextModelToken = allowCarry ? (context?.model ?? "") : "";
   const augUpper = contextModelToken
     ? `${upper} ${contextModelToken.toUpperCase()}`
     : upper;
@@ -335,8 +385,7 @@ export function retrieveExact(
 
   // A compatibility verdict answers a different question than a symptom repair guide.
   // LLM `catalog_search` queries often echo extra tokens and could attach an unrelated guide.
-  // Only strip `guide` when THIS turn reads like a fit check — not when `compatibility` was
-  // resolved solely from session context while the user is asking a new symptom question.
+  // Only strip `guide` when THIS turn reads like a fit check.
   if (compatibility && guide) {
     const userLooksCompat = /\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/i.test(
       hay

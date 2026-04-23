@@ -19,8 +19,8 @@
  *
  * Handler contract:
  *   1. Parse/validate the request body; reject malformed input with 400.
- *   2. Run retrieval (via LLM-driven tools when OPENAI_API_KEY is set,
- *      otherwise a deterministic fallback).
+ *   2. Run retrieval via the OpenAI tool-calling loop (`OPENAI_API_KEY` required
+ *      for catalog-backed turns; see small non-LLM shortcuts below).
  *   3. Build structured `blocks` from the retrieval (categories 1–4).
  *   4. Apply the deterministic reply-override chain: OOS (6) → clarify (7)
  *      → fallback "no match" text. Overrides only fire when no block was
@@ -31,7 +31,6 @@
  */
 import { NextResponse } from "next/server";
 
-import { runToolsForUserMessage } from "@/lib/agentTools";
 import {
   buildBlocksFromRetrieval,
   buildClarifyReplyFromRetrieval,
@@ -40,7 +39,6 @@ import {
   conversationOnlyResponse,
   type ChatBlock,
 } from "@/lib/buildChatBlocks";
-import { formatCatalogReplyFromRetrieval } from "@/lib/formatCatalogReply";
 import type { HistoryTurn } from "@/lib/llm/runChatAgent";
 import { streamChatWithLlmTools } from "@/lib/llm/runChatAgent";
 import type { Citation, SessionContext } from "@/lib/retrieveExact";
@@ -275,72 +273,68 @@ export async function POST(request: Request) {
     }
   }
 
-  const useLlm = Boolean(process.env.OPENAI_API_KEY?.trim());
   const oos = buildOutOfScopeReplyFromRetrieval(message);
-
-  if (useLlm) {
+  if (oos) {
     return streamResponse(async (send) => {
-      const out = await streamChatWithLlmTools(
-        message,
-        history,
-        context,
-        (token) => send({ type: "token", text: token })
-      );
-      const blocks = oos ? [] : buildBlocksFromRetrieval(out.retrieval, message);
-      const clar =
-        blocks.length === 0 && !oos
-          ? buildClarifyReplyFromRetrieval(out.retrieval, message)
-          : null;
-
-      // If OOS or clarify overrides the reply, emit the override text as a
-      // "replace" event so the client can swap out whatever was streamed.
-      const overrideReply = oos ? oos.reply : clar ? clar.reply : null;
-      if (overrideReply) {
-        send({ type: "replace", text: overrideReply });
+      const words = oos.reply.split(" ");
+      for (const word of words) {
+        send({ type: "token", text: word + " " });
+        await new Promise((r) => setTimeout(r, 12));
       }
-
       send({
         type: "done",
-        blocks,
-        citations: alignCitationsToBlocks(out.citations, blocks),
-        suggested_actions: buildSuggestedActionsFromRetrieval(out.retrieval, message),
-        no_evidence: blocks.length === 0,
-        normalized_part_numbers: out.normalized_part_numbers,
-        tool_trace: out.tool_trace,
-        used_llm: true,
+        blocks: [],
+        citations: [],
+        suggested_actions: oos.hints.map((h, i) => ({
+          id: `oos-${i}`,
+          label: h,
+          prompt: h,
+        })),
+        no_evidence: true,
+        normalized_part_numbers: [],
+        tool_trace: [],
+        used_llm: false,
       });
     });
   }
 
-  // ── Deterministic (no-LLM) path ──────────────────────────────────────────
-  const { tool_trace, normalization, retrieval } = runToolsForUserMessage(message, context);
-  const blocks = oos ? [] : buildBlocksFromRetrieval(retrieval, message);
-  const clar =
-    blocks.length === 0 && !oos ? buildClarifyReplyFromRetrieval(retrieval, message) : null;
-  const reply = formatCatalogReplyFromRetrieval(
-    retrieval,
-    message,
-    oos?.reply ?? clar?.reply
-  );
-  const suggested_actions = buildSuggestedActionsFromRetrieval(retrieval, message);
-  const citations = alignCitationsToBlocks(retrieval.citations, blocks);
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return NextResponse.json(
+      {
+        error: "openai_not_configured",
+        message:
+          "OPENAI_API_KEY is required for this chat agent. Add it to web/.env.local and restart the dev server.",
+      },
+      { status: 503 }
+    );
+  }
 
-  // Stream the deterministic reply word-by-word for a consistent streaming UX.
   return streamResponse(async (send) => {
-    const words = reply.split(" ");
-    for (const word of words) {
-      send({ type: "token", text: word + " " });
-      await new Promise((r) => setTimeout(r, 12));
+    const out = await streamChatWithLlmTools(
+      message,
+      history,
+      context,
+      (token) => send({ type: "token", text: token })
+    );
+    const blocks = buildBlocksFromRetrieval(out.retrieval, message);
+    const clar =
+      blocks.length === 0
+        ? buildClarifyReplyFromRetrieval(out.retrieval, message)
+        : null;
+
+    if (clar) {
+      send({ type: "replace", text: clar.reply });
     }
+
     send({
       type: "done",
       blocks,
-      citations,
-      suggested_actions,
+      citations: alignCitationsToBlocks(out.citations, blocks),
+      suggested_actions: buildSuggestedActionsFromRetrieval(out.retrieval, message),
       no_evidence: blocks.length === 0,
-      normalized_part_numbers: normalization.part_numbers,
-      tool_trace,
-      used_llm: false,
+      normalized_part_numbers: out.normalized_part_numbers,
+      tool_trace: out.tool_trace,
+      used_llm: true,
     });
   });
 }

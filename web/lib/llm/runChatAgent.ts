@@ -15,7 +15,7 @@ import {
 import catalog from "../../data/catalog.json";
 import { formatCatalogReplyFromRetrieval } from "../formatCatalogReply";
 import type { Citation, SessionContext } from "../retrieveExact";
-import { retrieveExact } from "../retrieveExact";
+import { allowSessionCarryForRetrieval, retrieveExact } from "../retrieveExact";
 import { fetchPartPageTool } from "../tools/fetchPartPage";
 import { semanticSearchTool } from "../tools/semanticSearch";
 import { executePartselectTool } from "../toolExecutor";
@@ -23,6 +23,22 @@ import { PARTSELECT_OPENAI_TOOLS } from "./openaiTools";
 import { PARTSELECT_AGENT_SYSTEM } from "./systemPrompt";
 
 type RetrievalResult = ReturnType<typeof retrieveExact>;
+
+/**
+ * Same gate as `retrieveExact`: only expose PS/model session to the LLM and
+ * `catalog_search` when the current message continues a parts task. Otherwise
+ * the system prompt's "use session when calling tools" line makes the model
+ * call `check_compatibility` on vague follow-ups like "narrow it down".
+ */
+function gatedSessionContext(
+  userMessage: string,
+  context: SessionContext | undefined
+): SessionContext | undefined {
+  if (!context?.partNumber && !context?.model) return undefined;
+  return allowSessionCarryForRetrieval(userMessage, userMessage.toLowerCase())
+    ? context
+    : undefined;
+}
 
 function pushCite(citations: Citation[], c: Citation) {
   if (!citations.some((x) => x.id === c.id)) citations.push(c);
@@ -254,7 +270,7 @@ function buildSystemContent(context?: SessionContext): string {
   if (context?.model) contextLines.push(`model ${context.model}`);
   const sessionNote =
     contextLines.length > 0
-      ? `\n\n[Session context — resolved from prior turns: ${contextLines.join(", ")}. Do not ask the user to repeat this information; use it directly when calling tools.]`
+      ? `\n\n[Session context — resolved from prior turns: ${contextLines.join(", ")}. Prefer these anchors when the user's *current* message continues the same parts task (install, price/stock, fit, or lookup). Do not call check_compatibility with them on vague follow-ups (e.g. "yes", "narrow it down") unless the user clearly means that specific part and model.]`
       : "";
   return PARTSELECT_AGENT_SYSTEM + sessionNote;
 }
@@ -289,10 +305,11 @@ export async function runChatWithLlmTools(
 
   const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
   const openai = new OpenAI({ apiKey });
-  const systemContent = buildSystemContent(context);
+  const gated = gatedSessionContext(userMessage, context);
+  const systemContent = buildSystemContent(gated);
 
   const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
-    userMessage, history, context, openai, model, systemContent
+    userMessage, history, gated, openai, model, systemContent
   );
 
   const lastMsg = messages[messages.length - 1]!;
@@ -337,10 +354,11 @@ export async function streamChatWithLlmTools(
 
   const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
   const openai = new OpenAI({ apiKey });
-  const systemContent = buildSystemContent(context);
+  const gated = gatedSessionContext(userMessage, context);
+  const systemContent = buildSystemContent(gated);
 
   const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
-    userMessage, history, context, openai, model, systemContent
+    userMessage, history, gated, openai, model, systemContent
   );
 
   // If the tool loop already produced a text reply (rare), stream it and return.

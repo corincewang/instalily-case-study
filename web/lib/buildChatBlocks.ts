@@ -1,4 +1,4 @@
-import { retrieveExact } from "./retrieveExact";
+import { allowSessionCarryForRetrieval, retrieveExact } from "./retrieveExact";
 
 type Retrieval = ReturnType<typeof retrieveExact>;
 
@@ -141,7 +141,7 @@ export function classifyIntent(userMessage: string): ChatIntent {
     return "install";
   }
   if (
-    /\b(not working|won'?t|doesn'?t|broken|leak|leaking|fix|repair|troubleshoot|no ice|stopped|makes noise|grinding|clogged)\b/.test(
+    /\b(not working|isn'?t|is not|won'?t|wont|doesn'?t|broken|leak|leaking|fix|repair|troubleshoot|no ice|stopped|makes noise|grinding|clogged)\b/.test(
       m
     )
   ) {
@@ -479,6 +479,19 @@ function hasBrandSignal(userMessage: string): boolean {
   return KNOWN_BRANDS.some((b) => m.includes(b));
 }
 
+/**
+ * Product commerce cards only when the user is clearly asking about a part
+ * (PS/OEM, price/stock, install/replace/fit, or named component) — not mere
+ * appliance chitchat that still resolves a stray `part` from tools/retrieval.
+ */
+function shouldRenderProductCard(userMessage: string, intent: ChatIntent): boolean {
+  if (PS_TOKEN_RE.test(userMessage) || OEM_TOKEN_RE.test(userMessage)) return true;
+  if (intent === "buy" || intent === "oem") return true;
+  return /\b(parts?|replace|replacement|install|compatible|fit(?:s)?|broken|leak|fix|repair|not working|symptom|price|stock|how much|oem\b|rack|bin|valve|latch|shelf|gasket|filter|motor|pump|seal|hose|wheel|spray arm|ice maker|door seal)\b/i.test(
+    userMessage
+  );
+}
+
 const MODELISH_RE = /\b([A-Z]{2,}\d{3,}[A-Z0-9]{2,})\b/gi;
 
 /**
@@ -735,12 +748,11 @@ export function detectClarification(
 /* domain. Like clarify, this is *dialog*, not structured catalog data, */
 /* so it renders as reply + chips — no card.                            */
 /*                                                                      */
-/* Two-stage filter, rule-first (LLM is unreliable on jailbreak prompts)*/
-/*   (a) White-list: any in-domain signal word → never treat as OOS.    */
-/*   (b) Black-list: a curated set of unambiguously-OOS tokens / phrases*/
-/*       (other appliances, unrelated topics, prompt-injection attempts)*/
-/*   (c) No signal either way → fall through (the "no match found"     */
-/*       branch handles it; we'd rather stay silent than over-refuse). */
+/* Rule-first (LLM is unreliable on jailbreak prompts):               */
+/*   (0) Prompt-injection patterns → OOS first.                          */
+/*   (a) In-domain signal word → not OOS (beats black-list noise).       */
+/*   (b) Black-list OOS (other appliances, code, unrelated).            */
+/*   (c) Bare PS# → in-scope anchor if nothing else matched.            */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -824,20 +836,51 @@ export type OutOfScopeReason =
   | "code_request"
   | "unrelated_topic";
 
+/** Décor / lifestyle mentions of an appliance — not a parts transaction (still hits "dishwasher" in IN_SCOPE). */
+const NON_PART_APPLIANCE_LIFESTYLE_RE =
+  /\b(decorate|decoration|decorating|decorative|aesthetics?|feng\s+shui|wallpaper|stickers?|pretty\s+up|make\s+it\s+cute)\b/i;
+
 export function detectOutOfScope(
   userMessage: string
 ): { reason: OutOfScopeReason; label: string } | null {
-  // White-list short-circuit: any domain signal word → not out-of-scope,
-  // even if a black-list word also appears (e.g. "dryer on my dishwasher" —
-  // the dishwasher anchor wins).
+  // Prompt-injection checks run before in-domain anchors so they cannot hide
+  // behind "refrigerator" / PS tokens.
+  const injection = OOS_GROUPS.find((g) => g.reason === "prompt_injection");
+  if (injection && injection.patterns.some((re) => re.test(userMessage))) {
+    return { reason: "prompt_injection", label: injection.label };
+  }
+
+  // "Decorate my dishwasher" mentions an in-scope appliance but is not a parts query.
+  if (
+    NON_PART_APPLIANCE_LIFESTYLE_RE.test(userMessage) &&
+    /\b(refrigerators?|fridges?|dishwashers?)\b/i.test(userMessage)
+  ) {
+    if (!PS_TOKEN_RE.test(userMessage) && !OEM_TOKEN_RE.test(userMessage)) {
+      const hasPartTask = /\b(parts?|install|replace|replacement|compatible|fit(?:s)?|broken|leak|fix|repair|not working|symptom|price|stock|how much|rack|bin|valve|latch|shelf|gasket|filter|motor|pump)\b/i.test(
+        userMessage
+      );
+      if (!hasPartTask) {
+        return { reason: "unrelated_topic", label: "non-parts request" };
+      }
+    }
+  }
+
+  // White-list: any clear fridge/dishwasher-domain signal → not OOS, even if a
+  // black-list word also appears (e.g. "dryer on my dishwasher" — dishwasher wins).
   if (IN_SCOPE_SIGNAL_RE.test(userMessage)) return null;
-  // PS-number presence is also a strong in-scope anchor.
-  if (/\bPS\d{5,}\b/i.test(userMessage)) return null;
+
+  // Explicit OOS topics (other appliances, code, unrelated) beat a bare PS# in
+  // the same message — otherwise "PS11738120 for my dryer" wrongly in-scopes.
   for (const g of OOS_GROUPS) {
+    if (g.reason === "prompt_injection") continue;
     if (g.patterns.some((re) => re.test(userMessage))) {
       return { reason: g.reason as OutOfScopeReason, label: g.label };
     }
   }
+
+  // PS number alone (or with neutral wording) — strong in-scope anchor.
+  if (/\bPS\d{5,}\b/i.test(userMessage)) return null;
+
   return null;
 }
 
@@ -964,8 +1007,13 @@ export function buildBlocksFromRetrieval(
       // (same UX as "Find a lower rack wheel" today); 0 → no block.
       if (!vagueOpener) {
         if (r.searchResults && r.searchResults.length >= 2) {
-          blocks.push(buildSearchSupportBlock(r.searchResults));
-        } else if (r.part) {
+          if (
+            shouldRenderProductCard(userMessage, intent) ||
+            /\b(show|list|browse|find)\b/i.test(userMessage)
+          ) {
+            blocks.push(buildSearchSupportBlock(r.searchResults));
+          }
+        } else if (r.part && shouldRenderProductCard(userMessage, intent)) {
           blocks.push(buildProductBlock(r.part));
         }
       }
@@ -976,9 +1024,13 @@ export function buildBlocksFromRetrieval(
       // just a model number after a clarify turn that already knew the part),
       // show the compat card — it's the most specific answer we have.
       // Otherwise fall back to a product card if a part is known.
-      if (r.compatibility && !detectClarification(userMessage, r, "compat")) {
+      if (
+        r.compatibility &&
+        !detectClarification(userMessage, r, "compat") &&
+        allowSessionCarryForRetrieval(userMessage, userMessage.toLowerCase())
+      ) {
         blocks.push(buildCompatSupportBlock(r.compatibility));
-      } else if (!vagueOpener && r.part) {
+      } else if (!vagueOpener && r.part && shouldRenderProductCard(userMessage, intent)) {
         blocks.push(buildProductBlock(r.part));
       }
       break;

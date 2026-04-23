@@ -9,7 +9,7 @@ A chat agent for the PartSelect e-commerce platform, scoped to **refrigerator an
 ```bash
 cd web
 npm install
-cp .env.example .env.local   # then add your OpenAI key (optional — see below)
+cp .env.example .env.local   # then add your OpenAI key (required for /api/chat)
 npm run dev
 ```
 
@@ -22,9 +22,7 @@ Open [http://localhost:3000](http://localhost:3000).
 Create `web/.env.local`:
 
 ```env
-# Required for the LLM path (GPT function calling + reasoning replies).
-# If omitted the agent runs in deterministic mode — all 7 query categories
-# still work; the reply text is rule-generated instead of LLM-written.
+# Required — catalog turns use GPT function calling + streaming replies.
 OPENAI_API_KEY=sk-...
 
 # Optional — defaults to gpt-4o-mini if not set.
@@ -43,8 +41,8 @@ web/
 ├── lib/
 │   ├── retrieveExact.ts      # Rule-based hybrid retrieval (catalog lookup)
 │   ├── buildChatBlocks.ts    # Intent classification → UI block builder
-│   ├── formatCatalogReply.ts # Deterministic reply fallback (no-LLM path)
-│   ├── agentTools.ts         # Tool names + deterministic tool chain
+│   ├── formatCatalogReply.ts # Reply text helper for LLM consistency guard
+│   ├── agentTools.ts         # Tool name constants + ToolTraceEntry type
 │   ├── toolExecutor.ts       # Sync tool dispatcher (used by LLM loop)
 │   ├── tools/
 │   │   ├── normalizePartNumber.ts  # Extract PS##### from free text
@@ -85,7 +83,7 @@ The suite runs 19 test cases including:
 - Clarification prompts (3 shapes)
 - Multi-turn context carry-forward
 
-When `OPENAI_API_KEY` is set, the suite also asserts that the LLM chose the correct specific tool for each query (e.g. `check_compatibility` not `catalog_search`).
+The suite asserts that the LLM chose the correct specific tool where applicable (e.g. `check_compatibility` not `catalog_search`). Requires `OPENAI_API_KEY` in the server environment.
 
 ---
 
@@ -97,24 +95,21 @@ User message
     ▼
 [OOS gate]  ← deterministic, runs before LLM — cannot be prompt-injected
     │ in-scope
-    ├── LLM path (OPENAI_API_KEY set)
+    ├── LLM path (OPENAI_API_KEY required)
     │   Tool loop (≤ 6 rounds):
     │     normalize_part_number → lookup_part | check_compatibility |
     │     get_install_guide | search_by_symptom | catalog_search (fallback)
     │   If lookup_part fails → fetch_part_page (live PartSelect.com via Jina.ai)
     │
-    ├── Deterministic path (no API key)
-    │   Same tools via heuristic routing — identical golden test coverage
-    │
     ▼
-[buildBlocksFromRetrieval]  ← shared by both paths
+[buildBlocksFromRetrieval]
 [OOS / clarify override]    ← if blocks empty
 JSON { reply, blocks, citations, suggested_actions, tool_trace, used_llm }
 ```
 
 **Two invariants:**
-1. The LLM never invents product facts — retrieval is the source of truth.
-2. The system works end-to-end without an API key (deterministic path passes all golden tests).
+1. The LLM never invents product facts — tool outputs + `retrieveExact` are the source of truth for cards.
+2. Small shortcuts (greeting ack, glossary FAQs) avoid an LLM round but do not run the full catalog agent.
 
 **Live fetch fallback:** For any PS number not in the local catalog, `fetch_part_page` fetches the real PartSelect product page via [Jina.ai](https://jina.ai) and returns price, stock, and description. The local catalog acts as a rich cache for a small set of seed parts; the live tool makes the agent answer-capable across PartSelect's full catalog.
 
