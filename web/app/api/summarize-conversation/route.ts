@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+
+import { createTrackedOpenAI } from "@/lib/langfuse/createTrackedOpenAI";
+import { flushLangfuseSpans } from "@/lib/langfuse/otel";
 
 type Turn = { role?: unknown; content?: unknown };
 
@@ -53,7 +55,10 @@ export async function POST(request: Request) {
   }
 
   const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
-  const openai = new OpenAI({ apiKey });
+  const openai = createTrackedOpenAI(apiKey, {
+    traceName: "partselect-conversation-summary",
+    tags: ["partselect", "summarize"],
+  });
 
   const system =
     "You compress refrigerator/dishwasher parts chat for session memory. " +
@@ -83,6 +88,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ summary: truncate(text, 8000) });
   } catch {
     return NextResponse.json({ summary: truncate(fallbackFromTurns(previous_summary, turns), 8000) });
+  } finally {
+    await flushLangfuseSpans();
   }
 }
 

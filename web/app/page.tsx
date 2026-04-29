@@ -94,6 +94,21 @@ type ChatMessage = {
 
 /** Browser-local demo state (chat + cart + rolling summary). Bump `v` if the shape changes. */
 const LS_DEMO_STATE_KEY = "partselect-demo-state-v2";
+/** Stable per-browser id for Langfuse Sessions (optional backend tracing). */
+const LS_LANGFUSE_SESSION_KEY = "partselect-langfuse-session-id";
+
+function getOrCreateLangfuseSessionId(): string {
+  try {
+    let id = localStorage.getItem(LS_LANGFUSE_SESSION_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(LS_LANGFUSE_SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
 
 function isChatMessage(x: unknown): x is ChatMessage {
   if (!x || typeof x !== "object") return false;
@@ -835,6 +850,7 @@ export default function Home() {
       .map((m) => ({ role: m.role, content: m.content }));
     const history = priorSnapshot.slice(-VERBATIM_MESSAGE_CAP);
     const summaryPayload = rollingSummary.trim().slice(0, MAX_CONVERSATION_SUMMARY_CHARS);
+    const langfuseSessionId = getOrCreateLangfuseSessionId();
 
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", content: trimmed }]);
 
@@ -848,6 +864,7 @@ export default function Home() {
           message: trimmed,
           history,
           ...(summaryPayload ? { conversation_summary: summaryPayload } : {}),
+          ...(langfuseSessionId ? { langfuse_session_id: langfuseSessionId } : {}),
         }),
       });
 

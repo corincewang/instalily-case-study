@@ -39,6 +39,7 @@ import {
   conversationOnlyResponse,
   type ChatBlock,
 } from "@/lib/buildChatBlocks";
+import { flushLangfuseSpans } from "@/lib/langfuse/otel";
 import type { HistoryTurn } from "@/lib/llm/runChatAgent";
 import { streamChatWithLlmTools } from "@/lib/llm/runChatAgent";
 import { resolveCatalogContext } from "@/lib/loadCatalog";
@@ -201,6 +202,8 @@ type ChatRequestBody = {
   message?: unknown;
   history?: unknown;
   conversation_summary?: unknown;
+  /** Optional — groups Langfuse traces for one browser session / conversation. */
+  langfuse_session_id?: unknown;
 };
 
 /** NDJSON streaming helpers */
@@ -411,35 +414,49 @@ export async function POST(request: Request) {
     );
   }
 
+  const langfuseSession =
+    typeof body.langfuse_session_id === "string" ? body.langfuse_session_id.trim().slice(0, 128) : undefined;
+
   return streamResponse(async (send) => {
-    const catalogCtx = await resolveCatalogContext();
-    const out = await streamChatWithLlmTools(
-      message,
-      history,
-      context,
-      (token) => send({ type: "token", text: token }),
-      conversationSummary || undefined,
-      catalogCtx
-    );
-    const blocks = await buildBlocksFromRetrieval(out.retrieval, message, catalogCtx);
-    const clar =
-      blocks.length === 0
-        ? await buildClarifyReplyFromRetrieval(out.retrieval, message, catalogCtx)
-        : null;
+    try {
+      const catalogCtx = await resolveCatalogContext();
+      const out = await streamChatWithLlmTools(
+        message,
+        history,
+        context,
+        (token) => send({ type: "token", text: token }),
+        conversationSummary || undefined,
+        {
+          catalogArg: catalogCtx,
+          langfuse: {
+            traceName: "partselect-chat-agent",
+            ...(langfuseSession ? { sessionId: langfuseSession } : {}),
+            tags: ["partselect", "chat"],
+          },
+        }
+      );
+      const blocks = await buildBlocksFromRetrieval(out.retrieval, message, catalogCtx);
+      const clar =
+        blocks.length === 0
+          ? await buildClarifyReplyFromRetrieval(out.retrieval, message, catalogCtx)
+          : null;
 
-    if (clar) {
-      send({ type: "replace", text: clar.reply });
+      if (clar) {
+        send({ type: "replace", text: clar.reply });
+      }
+
+      send({
+        type: "done",
+        blocks,
+        citations: alignCitationsToBlocks(out.citations, blocks),
+        suggested_actions: await buildSuggestedActionsFromRetrieval(out.retrieval, message, catalogCtx),
+        no_evidence: blocks.length === 0,
+        normalized_part_numbers: out.normalized_part_numbers,
+        tool_trace: out.tool_trace,
+        used_llm: true,
+      });
+    } finally {
+      await flushLangfuseSpans();
     }
-
-    send({
-      type: "done",
-      blocks,
-      citations: alignCitationsToBlocks(out.citations, blocks),
-      suggested_actions: await buildSuggestedActionsFromRetrieval(out.retrieval, message, catalogCtx),
-      no_evidence: blocks.length === 0,
-      normalized_part_numbers: out.normalized_part_numbers,
-      tool_trace: out.tool_trace,
-      used_llm: true,
-    });
   });
 }
