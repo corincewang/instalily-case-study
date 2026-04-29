@@ -1,4 +1,7 @@
-import catalog from "../../data/catalog.json";
+import type { CatalogShape } from "../catalogTypes";
+import { collapseModelTokenDb } from "../catalogDb";
+import type { CatalogContext } from "../loadCatalog";
+import { prisma } from "../prisma";
 
 export type CheckCompatibilityResult =
   | {
@@ -17,20 +20,46 @@ export type CheckCompatibilityResult =
  * Both `part_number` and `model` are required — the LLM must collect both
  * before calling this tool.
  */
-export function checkCompatibilityTool(input: {
-  part_number: string;
-  model: string;
-}): CheckCompatibilityResult {
+export async function checkCompatibilityTool(
+  input: {
+    part_number: string;
+    model: string;
+  },
+  catalogCtx: CatalogContext
+): Promise<CheckCompatibilityResult> {
   const partUpper = input.part_number.trim().toUpperCase();
   const modelUpper = input.model.trim().toUpperCase().replace(/[\s._-]/g, "");
 
   if (!partUpper) return { ok: false, error: "part_number is required" };
   if (!modelUpper) return { ok: false, error: "model is required" };
 
-  const row = catalog.compatibilities.find((r) => {
-    const rowModel = r.model.toUpperCase().replace(/[\s._-]/g, "");
-    const rowPart = r.partNumber.toUpperCase();
-    return rowModel === modelUpper && rowPart === partUpper;
+  if (catalogCtx.mode === "memory") {
+    const row = catalogCtx.catalog.compatibilities.find((r) => {
+      const rowModel = r.model.toUpperCase().replace(/[\s._-]/g, "");
+      const rowPart = r.partNumber.toUpperCase();
+      return rowModel === modelUpper && rowPart === partUpper;
+    });
+    if (!row) {
+      return {
+        ok: false,
+        error: `No compatibility record found for part ${partUpper} with model ${input.model.trim()}. The catalog may not have this combination — advise the user to verify on partselect.com.`,
+      };
+    }
+    return {
+      ok: true,
+      compatible: row.compatible,
+      model: row.model,
+      partNumber: row.partNumber,
+      note: row.note,
+      rowId: row.id,
+    };
+  }
+
+  const row = await prisma.catalogCompatibility.findFirst({
+    where: {
+      partNumber: partUpper,
+      modelNormalized: collapseModelTokenDb(input.model),
+    },
   });
 
   if (!row) {
@@ -40,12 +69,13 @@ export function checkCompatibilityTool(input: {
     };
   }
 
+  const compat = row.data as CatalogShape["compatibilities"][number];
   return {
     ok: true,
-    compatible: row.compatible,
-    model: row.model,
-    partNumber: row.partNumber,
-    note: row.note,
-    rowId: row.id,
+    compatible: compat.compatible,
+    model: compat.model,
+    partNumber: compat.partNumber,
+    note: compat.note,
+    rowId: compat.id,
   };
 }

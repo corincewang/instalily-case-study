@@ -1,12 +1,12 @@
-import catalog from "../data/catalog.json";
+import * as catalogDb from "./catalogDb";
+import type { CatalogContext } from "./loadCatalog";
+import type { CatalogShape } from "./catalogTypes";
 
 export type Citation = {
   id: string;
   source: "part_catalog" | "compatibility_database" | "repair_guide";
   label: string;
 };
-
-type CatalogShape = typeof catalog;
 
 const PS_RE = /\bPS\d{5,}\b/gi;
 const PS_IN_MESSAGE_RE = /\bPS\d{5,}\b/i;
@@ -24,7 +24,10 @@ export function modelTokenInCurrentMessage(hay: string): boolean {
 }
 
 /** Model tags that have a compatibility row for this PS in the local catalog (demo subset). */
-export function documentedCompatModelsForPartNumber(partNumber: string): string[] {
+export function documentedCompatModelsForPartNumber(
+  partNumber: string,
+  catalog: CatalogShape
+): string[] {
   const u = partNumber.toUpperCase();
   return (catalog.compatibilities as Array<{ partNumber: string; model: string }>)
     .filter((r) => r.partNumber.toUpperCase() === u)
@@ -82,16 +85,16 @@ export function isProceduralPartsChatHelpMessage(userMessage: string): boolean {
   return false;
 }
 
-function normalizeModelToken(s: string) {
+export function normalizeModelToken(s: string) {
   return s.trim().toUpperCase();
 }
 
 /** Collapse spaces / punctuation so typed model numbers still match the catalog row (4-P1). */
-function collapseModelToken(s: string) {
+export function collapseModelToken(s: string) {
   return s.replace(/[\s._\-]/g, "").toUpperCase();
 }
 
-function pushCitation(citations: Citation[], c: Citation) {
+export function pushCitation(citations: Citation[], c: Citation) {
   if (!citations.some((x) => x.id === c.id)) {
     citations.push(c);
   }
@@ -140,17 +143,21 @@ export type SessionContext = {
  * {@link allowSessionCarryForRetrieval} is true for this message (compat/install/price
  * language, PS/model in the current text, etc.) — not on unrelated symptom turns.
  */
-export function retrieveExact(
-  userMessage: string,
-  context?: SessionContext
-): {
+export type RetrievalResult = {
   citations: Citation[];
   part?: CatalogShape["parts"][number];
   compatibility?: CatalogShape["compatibilities"][number];
   guide?: CatalogShape["repairGuides"][number];
   candidates?: CandidatePart[];
   searchResults?: SearchHit[];
-} {
+};
+
+/** Disk/small-demo path: full `catalog.json` in memory (linear scans OK). */
+export function retrieveExactMemory(
+  userMessage: string,
+  context: SessionContext | undefined,
+  catalog: CatalogShape
+): RetrievalResult {
   const citations: Citation[] = [];
   const hay = userMessage;
   const upper = hay.toUpperCase();
@@ -450,4 +457,283 @@ export function retrieveExact(
     candidates: candidates.length > 0 ? candidates : undefined,
     searchResults: searchResults.length > 0 ? searchResults : undefined,
   };
+}
+
+/**
+ * MySQL-backed path: indexed lookups + FULLTEXT prefetch + top-K rescoring (symptom/browse).
+ * Suitable for ~100k+ parts without loading the catalog into RAM.
+ */
+export async function retrieveExactDatabase(
+  userMessage: string,
+  context: SessionContext | undefined
+): Promise<RetrievalResult> {
+  const citations: Citation[] = [];
+  const hay = userMessage;
+  const upper = hay.toUpperCase();
+  const lower = hay.toLowerCase();
+  const collapsedHay = collapseModelToken(hay);
+  const allowCarry = allowSessionCarryForRetrieval(hay, lower);
+
+  let part: CatalogShape["parts"][number] | undefined;
+
+  for (const m of hay.matchAll(PS_RE)) {
+    const n = m[0].toUpperCase();
+    const hit = await catalogDb.lookupPartByPs(n);
+    if (hit) {
+      part = hit;
+      break;
+    }
+  }
+  if (part) {
+    pushCitation(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
+  }
+
+  if (!part) {
+    const tokens = catalogDb.extractManufacturerLikeTokens(upper);
+    const hit = await catalogDb.lookupPartByManufacturerCodes(tokens);
+    if (hit) {
+      part = hit;
+      const oem = (hit as { manufacturerPartNumber?: string }).manufacturerPartNumber ?? "";
+      pushCitation(citations, {
+        id: hit.id,
+        source: "part_catalog",
+        label: `Part catalog (OEM ${oem})`,
+      });
+    }
+  }
+
+  if (!part) {
+    const sup = await catalogDb.lookupPartBySupersededNumbers(
+      catalogDb.extractManufacturerLikeTokens(upper)
+    );
+    if (sup) {
+      part = sup.part;
+      pushCitation(citations, {
+        id: sup.part.id,
+        source: "part_catalog",
+        label: `Part catalog (supersedes ${sup.matchedNormalized})`,
+      });
+    }
+  }
+
+  if (!part && context?.partNumber && allowCarry) {
+    const carried = await catalogDb.lookupPartByPs(context.partNumber);
+    if (carried) {
+      part = carried;
+      pushCitation(citations, {
+        id: carried.id,
+        source: "part_catalog",
+        label: "Part catalog (session context)",
+      });
+    }
+  }
+
+  const contextModelToken = allowCarry ? (context?.model ?? "") : "";
+  const augUpper = contextModelToken
+    ? `${upper} ${contextModelToken.toUpperCase()}`
+    : upper;
+  const augCollapsed = contextModelToken
+    ? `${collapsedHay} ${collapseModelToken(contextModelToken)}`
+    : collapsedHay;
+
+  const compatibility = await catalogDb.findCompatibilityMatch({ augUpper, augCollapsed, part });
+  if (compatibility) {
+    pushCitation(citations, {
+      id: compatibility.id,
+      source: "compatibility_database",
+      label: "Compatibility database",
+    });
+  }
+
+  if (compatibility && !part) {
+    const linked = await catalogDb.lookupPartByPs(compatibility.partNumber);
+    if (linked) {
+      part = linked;
+      pushCitation(citations, {
+        id: linked.id,
+        source: "part_catalog",
+        label: "Part catalog (from compatibility row)",
+      });
+    }
+  }
+
+  const guideRows = await catalogDb.loadRepairGuideRows();
+  let guide: CatalogShape["repairGuides"][number] | undefined;
+  for (const row of guideRows) {
+    const g = row.data as CatalogShape["repairGuides"][number];
+    const ok = g.matchIncludesAll.every((frag) => lower.includes(frag.toLowerCase()));
+    if (ok) {
+      guide = g;
+      break;
+    }
+  }
+  if (guide) {
+    pushCitation(citations, { id: guide.id, source: "repair_guide", label: "Repair guide" });
+  }
+
+  const BARE_APPLIANCE_KEYWORD = new Set([
+    "dishwasher",
+    "dishwashers",
+    "refrigerator",
+    "refrigerators",
+    "fridge",
+    "fridges",
+  ]);
+
+  if (!part) {
+    const ftsPool = await catalogDb.fulltextSearchParts(lower, catalogDb.FTS_PREFETCH_LIMIT);
+    for (const p of ftsPool) {
+      const keywords =
+        "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
+          ? (p as { keywords: string[] }).keywords
+          : [];
+      const hit = keywords.find((k) => {
+        if (typeof k !== "string" || k.length < 3) return false;
+        const kl = k.toLowerCase();
+        if (BARE_APPLIANCE_KEYWORD.has(kl)) return false;
+        return lower.includes(kl);
+      });
+      if (hit) {
+        part = p;
+        pushCitation(citations, {
+          id: p.id,
+          source: "part_catalog",
+          label: "Part catalog (keyword match)",
+        });
+        break;
+      }
+    }
+  }
+
+  if (!guide) {
+    for (const row of guideRows) {
+      const g = row.data as CatalogShape["repairGuides"][number];
+      const flex = (g as { matchFlexible?: string[][] }).matchFlexible;
+      if (!flex || flex.length < 2) continue;
+      const flexOk = flex.every((group) =>
+        group.some((term) => lower.includes(term.toLowerCase()))
+      );
+      if (flexOk) {
+        guide = g;
+        pushCitation(citations, {
+          id: g.id,
+          source: "repair_guide",
+          label: "Repair guide (keyword match)",
+        });
+        break;
+      }
+    }
+  }
+
+  const symptomPool = await catalogDb.fulltextSearchParts(lower, catalogDb.FTS_PREFETCH_LIMIT);
+  const scored: CandidatePart[] = [];
+  for (const p of symptomPool) {
+    const syms = (p as { symptoms?: string[] }).symptoms;
+    if (!Array.isArray(syms) || syms.length === 0) continue;
+    const matched = syms.filter(
+      (s) => typeof s === "string" && s.length > 0 && lower.includes(s.toLowerCase())
+    );
+    if (matched.length > 0) scored.push({ part: p, matchedPhrases: matched });
+  }
+  scored.sort((a, b) => b.matchedPhrases.length - a.matchedPhrases.length);
+  const candidates = scored.slice(0, catalogDb.SYMPTOM_TOP_K);
+  for (const c of candidates) {
+    pushCitation(citations, {
+      id: c.part.id,
+      source: "part_catalog",
+      label: `Part catalog (symptom: "${c.matchedPhrases[0]}")`,
+    });
+  }
+
+  let searchResults: SearchHit[] = [];
+  if (!isProceduralPartsChatHelpMessage(hay)) {
+    const applianceSignals: Array<{ token: string; canonical: string }> = [
+      { token: "dishwasher", canonical: "dishwasher" },
+      { token: "refrigerator", canonical: "refrigerator" },
+      { token: "fridge", canonical: "refrigerator" },
+    ];
+    const queryAppliance = applianceSignals.find((a) => lower.includes(a.token))?.canonical;
+
+    let browsePool = await catalogDb.fulltextSearchParts(lower, catalogDb.FTS_PREFETCH_LIMIT);
+    if (browsePool.length === 0 && queryAppliance) {
+      browsePool = await catalogDb.samplePartsByApplianceFamily(queryAppliance, catalogDb.FTS_PREFETCH_LIMIT);
+    }
+
+    const searchScored: Array<{ part: CatalogShape["parts"][number]; score: number; phrase: string }> = [];
+    for (const p of browsePool) {
+      let score = 0;
+      let phrase = "";
+      if (queryAppliance && p.applianceFamily.toLowerCase() === queryAppliance) {
+        score += 1;
+        phrase = p.applianceFamily;
+      }
+      const keywords =
+        "keywords" in p && Array.isArray((p as { keywords?: string[] }).keywords)
+          ? (p as { keywords: string[] }).keywords
+          : [];
+      for (const k of keywords) {
+        if (typeof k !== "string" || k.length < 3) continue;
+        if (lower.includes(k.toLowerCase())) {
+          score += 2;
+          phrase = k;
+          break;
+        }
+      }
+      if (score > 0) searchScored.push({ part: p, score, phrase });
+    }
+    searchScored.sort((a, b) => b.score - a.score);
+    searchResults = searchScored
+      .slice(0, catalogDb.SEARCH_TOP_K)
+      .map((s) => ({ part: s.part, matchedPhrase: s.phrase }));
+    for (const s of searchResults) {
+      pushCitation(citations, {
+        id: s.part.id,
+        source: "part_catalog",
+        label: `Part catalog (search match: "${s.matchedPhrase}")`,
+      });
+    }
+  }
+
+  if (compatibility && guide) {
+    const userLooksCompat = /\b(compat|compatible|compatibility|fit|fits|work with|works with)\b/i.test(
+      hay
+    );
+    if (userLooksCompat) {
+      guide = undefined;
+      for (let i = citations.length - 1; i >= 0; i--) {
+        if (citations[i].source === "repair_guide") citations.splice(i, 1);
+      }
+    }
+  }
+
+  return {
+    citations,
+    part,
+    compatibility,
+    guide,
+    candidates: candidates.length > 0 ? candidates : undefined,
+    searchResults: searchResults.length > 0 ? searchResults : undefined,
+  };
+}
+
+export async function retrieveExact(
+  userMessage: string,
+  context: SessionContext | undefined,
+  catalogCtx: CatalogContext
+): Promise<RetrievalResult> {
+  if (catalogCtx.mode === "memory") {
+    return retrieveExactMemory(userMessage, context, catalogCtx.catalog);
+  }
+  return retrieveExactDatabase(userMessage, context);
+}
+
+/** Async compat-model list for clarify copy — works in DB mode without a full catalog slice. */
+export async function documentedCompatModelsForPart(
+  partNumber: string,
+  catalogCtx: CatalogContext
+): Promise<string[]> {
+  if (catalogCtx.mode === "memory") {
+    return documentedCompatModelsForPartNumber(partNumber, catalogCtx.catalog);
+  }
+  return catalogDb.documentedModelsForPart(partNumber);
 }

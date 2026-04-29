@@ -41,6 +41,8 @@ import {
 } from "@/lib/buildChatBlocks";
 import type { HistoryTurn } from "@/lib/llm/runChatAgent";
 import { streamChatWithLlmTools } from "@/lib/llm/runChatAgent";
+import { resolveCatalogContext } from "@/lib/loadCatalog";
+import { MAX_CONVERSATION_SUMMARY_CHARS } from "@/lib/conversationMemory";
 import type { Citation, SessionContext } from "@/lib/retrieveExact";
 
 /**
@@ -122,27 +124,27 @@ function firstModelTokenFromContent(content: string): string | undefined {
 }
 
 /**
- * Walk the history to find the most recently mentioned PS number and model token.
+ * Walk verbatim turns to find the most recently mentioned PS number and model token.
  * These become the `SessionContext` for `retrieveExact` carry-forward.
  *
  * - **User turns first (newest → oldest)** for both anchors so the assistant's
  *   latest card dump (full of OEM codes) does not overwrite the user's model.
  * - **Appliance model preferred over OEM-shaped tokens** within a single message.
  */
-function extractContext(history: HistoryTurn[]): SessionContext {
+function extractContextFromTurns(turns: HistoryTurn[]): SessionContext {
   let partNumber: string | undefined;
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role !== "user") continue;
-    const p = firstPsFromContent(history[i].content);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role !== "user") continue;
+    const p = firstPsFromContent(turns[i].content);
     if (p) {
       partNumber = p;
       break;
     }
   }
   if (!partNumber) {
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].role !== "assistant") continue;
-      const p = firstPsFromContent(history[i].content);
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].role !== "assistant") continue;
+      const p = firstPsFromContent(turns[i].content);
       if (p) {
         partNumber = p;
         break;
@@ -151,18 +153,18 @@ function extractContext(history: HistoryTurn[]): SessionContext {
   }
 
   let model: string | undefined;
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role !== "user") continue;
-    const m = firstModelTokenFromContent(history[i].content);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role !== "user") continue;
+    const m = firstModelTokenFromContent(turns[i].content);
     if (m) {
       model = m;
       break;
     }
   }
   if (!model) {
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].role !== "assistant") continue;
-      const m = firstModelTokenFromContent(history[i].content);
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].role !== "assistant") continue;
+      const m = firstModelTokenFromContent(turns[i].content);
       if (m) {
         model = m;
         break;
@@ -173,9 +175,32 @@ function extractContext(history: HistoryTurn[]): SessionContext {
   return { partNumber, model };
 }
 
+/**
+ * Same anchors as {@link extractContextFromTurns}, but verbatim `history` wins;
+ * optional `conversationSummary` fills missing PS/model from compressed older turns.
+ */
+function extractContext(history: HistoryTurn[], conversationSummary?: string): SessionContext {
+  const ctx = extractContextFromTurns(history);
+  const sum = conversationSummary?.trim();
+  if (!sum) return ctx;
+
+  let partNumber = ctx.partNumber;
+  let model = ctx.model;
+  if (!partNumber) {
+    const p = firstPsFromContent(sum);
+    if (p) partNumber = p;
+  }
+  if (!model) {
+    const m = firstModelTokenFromContent(sum);
+    if (m) model = m;
+  }
+  return { partNumber, model };
+}
+
 type ChatRequestBody = {
   message?: unknown;
   history?: unknown;
+  conversation_summary?: unknown;
 };
 
 /** NDJSON streaming helpers */
@@ -273,7 +298,10 @@ export async function POST(request: Request) {
   }
 
   const history = parseHistory(body.history);
-  const context = extractContext(history);
+  const conversationSummaryRaw =
+    typeof body.conversation_summary === "string" ? body.conversation_summary.trim() : "";
+  const conversationSummary = conversationSummaryRaw.slice(0, MAX_CONVERSATION_SUMMARY_CHARS);
+  const context = extractContext(history, conversationSummary || undefined);
 
   // Deterministic answers for common informational questions that don't need retrieval.
   const GLOSSARY: { pattern: RegExp; reply: string }[] = [
@@ -384,16 +412,19 @@ export async function POST(request: Request) {
   }
 
   return streamResponse(async (send) => {
+    const catalogCtx = await resolveCatalogContext();
     const out = await streamChatWithLlmTools(
       message,
       history,
       context,
-      (token) => send({ type: "token", text: token })
+      (token) => send({ type: "token", text: token }),
+      conversationSummary || undefined,
+      catalogCtx
     );
-    const blocks = buildBlocksFromRetrieval(out.retrieval, message);
+    const blocks = await buildBlocksFromRetrieval(out.retrieval, message, catalogCtx);
     const clar =
       blocks.length === 0
-        ? buildClarifyReplyFromRetrieval(out.retrieval, message)
+        ? await buildClarifyReplyFromRetrieval(out.retrieval, message, catalogCtx)
         : null;
 
     if (clar) {
@@ -404,7 +435,7 @@ export async function POST(request: Request) {
       type: "done",
       blocks,
       citations: alignCitationsToBlocks(out.citations, blocks),
-      suggested_actions: buildSuggestedActionsFromRetrieval(out.retrieval, message),
+      suggested_actions: await buildSuggestedActionsFromRetrieval(out.retrieval, message, catalogCtx),
       no_evidence: blocks.length === 0,
       normalized_part_numbers: out.normalized_part_numbers,
       tool_trace: out.tool_trace,

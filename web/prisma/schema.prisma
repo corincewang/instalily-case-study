@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per catalog part; `data` mirrors the JSON object in catalog.json.
+/// Denormalized columns power indexed lookups at ~100k+ row scale.
+model CatalogPart {
+  id                     String @id
+  partNumber             String @unique
+  manufacturerPartNumber String? @db.VarChar(128)
+  applianceFamily        String  @default("refrigerator") @db.VarChar(64)
+  /// Concatenated title, PS#, OEM#, keywords, symptoms — FULLTEXT for browse/symptom prefetch.
+  searchDocument         String? @db.LongText
+  data                   Json
+
+  replaces CatalogPartReplace[]
+
+  @@index([manufacturerPartNumber])
+  @@index([applianceFamily])
+  @@fulltext([searchDocument])
+}
+
+/// Supersession lookup: old OEM/AP numbers → current catalog row (indexed by old number).
+model CatalogPartReplace {
+  id                  String @id
+  oldNumberNormalized String @db.VarChar(64)
+  partId              String
+  part                CatalogPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@index([oldNumberNormalized])
+  @@index([partId])
+}
+
+model CatalogCompatibility {
+  id              String @id
+  partNumber      String @db.VarChar(32)
+  modelNormalized String @db.VarChar(64)
+  data            Json
+
+  @@index([partNumber])
+  @@index([modelNormalized])
+  @@index([partNumber, modelNormalized])
+}
+
+model CatalogRepairGuide {
+  id   String @id
+  data Json
+}

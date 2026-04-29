@@ -1,11 +1,12 @@
+import type { CatalogContext } from "./loadCatalog";
 import {
   allowSessionCarryForRetrieval,
-  documentedCompatModelsForPartNumber,
+  documentedCompatModelsForPart,
   isProceduralPartsChatHelpMessage,
-  retrieveExact,
+  type RetrievalResult,
 } from "./retrieveExact";
 
-type Retrieval = ReturnType<typeof retrieveExact>;
+type Retrieval = RetrievalResult;
 
 /**
  * Two-card vocabulary:
@@ -610,11 +611,12 @@ function hasStrongRepairSymptom(userMessage: string): boolean {
   );
 }
 
-export function detectClarification(
+export async function detectClarification(
   userMessage: string,
   r: Retrieval,
-  intent: ChatIntent
-): Clarification | null {
+  intent: ChatIntent,
+  catalogCtx: CatalogContext
+): Promise<Clarification | null> {
   // Escape hatch: the user typed a PS-like token that's too short to be real
   // (e.g. "PS99"). This is a data-validity issue, not missing info — let the
   // honest "no match found" path handle it so citations stay empty.
@@ -640,7 +642,7 @@ export function detectClarification(
         };
       }
       if (hasPart && !hasModel) {
-        const docModels = documentedCompatModelsForPartNumber(r.part!.partNumber);
+        const docModels = await documentedCompatModelsForPart(r.part!.partNumber, catalogCtx);
         const exampleModel = docModels[0] ?? "WRS325SDHZ";
         return {
           reason: "need_model",
@@ -933,10 +935,11 @@ export function buildOutOfScopeReplyFromRetrieval(
  * It surfaces as the assistant's reply text plus example-prompt chips, never as a card.
  * Returns `null` when the current query doesn't need clarification.
  */
-export function buildClarifyReplyFromRetrieval(
+export async function buildClarifyReplyFromRetrieval(
   r: Retrieval,
-  userMessage: string
-): { reply: string; hints: string[] } | null {
+  userMessage: string,
+  catalogCtx: CatalogContext
+): Promise<{ reply: string; hints: string[] } | null> {
   if (isConversationOnlyTurn(userMessage)) return null;
   if (isVaguePartsShoppingOpener(userMessage)) {
     return {
@@ -954,7 +957,7 @@ export function buildClarifyReplyFromRetrieval(
   if (intent === "generic") return null;
   // `detectClarification` already knows, per intent, which anchor is missing — so
   // we can ask about "model" even when `r.part` was found (e.g. "Is PS11752778 compatible?").
-  const clar = detectClarification(userMessage, r, intent);
+  const clar = await detectClarification(userMessage, r, intent, catalogCtx);
   if (!clar) return null;
 
   // Split hints: "Example: ..." entries become clickable chips; plain informational
@@ -977,10 +980,11 @@ export function buildClarifyReplyFromRetrieval(
   return { reply, hints: exampleHints };
 }
 
-export function buildBlocksFromRetrieval(
+export async function buildBlocksFromRetrieval(
   r: Retrieval,
-  userMessage = ""
-): ChatBlock[] {
+  userMessage: string,
+  catalogCtx: CatalogContext
+): Promise<ChatBlock[]> {
   if (isConversationOnlyTurn(userMessage)) return [];
 
   const intent = classifyIntent(userMessage);
@@ -998,7 +1002,7 @@ export function buildBlocksFromRetrieval(
       if (r.part) blocks.push(buildInstallSupportBlock(r.part));
       break;
     case "compat":
-      if (r.compatibility && !detectClarification(userMessage, r, "compat")) {
+      if (r.compatibility && !(await detectClarification(userMessage, r, "compat", catalogCtx))) {
         blocks.push(buildCompatSupportBlock(r.compatibility));
       }
       break;
@@ -1035,7 +1039,7 @@ export function buildBlocksFromRetrieval(
       // Otherwise fall back to a product card if a part is known.
       if (
         r.compatibility &&
-        !detectClarification(userMessage, r, "compat") &&
+        !(await detectClarification(userMessage, r, "compat", catalogCtx)) &&
         allowSessionCarryForRetrieval(userMessage, userMessage.toLowerCase())
       ) {
         blocks.push(buildCompatSupportBlock(r.compatibility));
@@ -1053,10 +1057,11 @@ export function buildBlocksFromRetrieval(
 }
 
 /** Chips describe the next useful pivot, given which card we just showed. */
-export function buildSuggestedActionsFromRetrieval(
+export async function buildSuggestedActionsFromRetrieval(
   r: Retrieval,
-  userMessage = ""
-): SuggestedAction[] {
+  userMessage: string,
+  catalogCtx: CatalogContext
+): Promise<SuggestedAction[]> {
   const intent = classifyIntent(userMessage);
   const out: SuggestedAction[] = [];
   const seen = new Set<string>();
@@ -1101,7 +1106,7 @@ export function buildSuggestedActionsFromRetrieval(
     return out.slice(0, 6);
   }
 
-  const clar = buildClarifyReplyFromRetrieval(r, userMessage);
+  const clar = await buildClarifyReplyFromRetrieval(r, userMessage, catalogCtx);
   if (clar) {
     clar.hints.forEach((h, i) => {
       push({

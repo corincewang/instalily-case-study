@@ -1,7 +1,11 @@
 import { isVaguePartsShoppingOpener } from "./buildChatBlocks";
-import { documentedCompatModelsForPartNumber, retrieveExact } from "./retrieveExact";
+import type { CatalogContext } from "./loadCatalog";
+import {
+  documentedCompatModelsForPart,
+  type RetrievalResult,
+} from "./retrieveExact";
 
-type Retrieval = ReturnType<typeof retrieveExact>;
+type Retrieval = RetrievalResult;
 type Part = NonNullable<Retrieval["part"]>;
 type Candidate = NonNullable<Retrieval["candidates"]>[number];
 
@@ -9,8 +13,11 @@ type Candidate = NonNullable<Retrieval["candidates"]>[number];
  * User supplied a model (often as a follow-up) but the demo catalog has no PS↔model row.
  * Keeps the story honest: we are data-limited, not "forgetting" the model.
  */
-export function formatMissingCompatPairReply(partNumber: string): string {
-  const docs = documentedCompatModelsForPartNumber(partNumber);
+export async function formatMissingCompatPairReply(
+  partNumber: string,
+  catalogCtx: CatalogContext
+): Promise<string> {
+  const docs = await documentedCompatModelsForPart(partNumber, catalogCtx);
   const docLine =
     docs.length > 0
       ? ` In this demo file, **${partNumber}** only has documented fit rows for: ${docs.map((m) => `**${m}**`).join(", ")}.`

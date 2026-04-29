@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { MAX_CONVERSATION_SUMMARY_CHARS, VERBATIM_MESSAGE_CAP } from "@/lib/conversationMemory";
 import { partSelectProductPageUrl } from "@/lib/partselectUrls";
+import { foldRollingSummary } from "@/lib/rollingSummaryFold";
 
 // ─── API types ────────────────────────────────────────────────────────────────
 
@@ -90,8 +92,8 @@ type ChatMessage = {
   suggested_actions?: SuggestedAction[];
 };
 
-/** Browser-local demo state (chat + cart). Bump `v` if the shape changes. */
-const LS_DEMO_STATE_KEY = "partselect-demo-state-v1";
+/** Browser-local demo state (chat + cart + rolling summary). Bump `v` if the shape changes. */
+const LS_DEMO_STATE_KEY = "partselect-demo-state-v2";
 
 function isChatMessage(x: unknown): x is ChatMessage {
   if (!x || typeof x !== "object") return false;
@@ -765,6 +767,10 @@ export default function Home() {
   }
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => buildWelcomeMessages());
+  /** Compressed memory for turns older than the last `VERBATIM_MESSAGE_CAP` verbatim messages. */
+  const [rollingSummary, setRollingSummary] = useState("");
+  /** Index in the non-welcome transcript up to which text is represented in `rollingSummary`. */
+  const [summaryFoldCursor, setSummaryFoldCursor] = useState(0);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -775,7 +781,9 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(LS_DEMO_STATE_KEY);
+      const raw =
+        localStorage.getItem(LS_DEMO_STATE_KEY) ??
+        localStorage.getItem("partselect-demo-state-v1");
       if (raw) {
         const data = JSON.parse(raw) as { v?: number; messages?: unknown[]; cart?: unknown[] };
         if (Array.isArray(data.messages) && data.messages.length > 0 && data.messages.every(isChatMessage)) {
@@ -797,12 +805,18 @@ export default function Home() {
     try {
       localStorage.setItem(
         LS_DEMO_STATE_KEY,
-        JSON.stringify({ v: 1, messages, cart: cartItems })
+        JSON.stringify({
+          v: 2,
+          messages,
+          cart: cartItems,
+          rollingSummary,
+          summaryFoldCursor,
+        })
       );
     } catch {
       /* quota / private mode */
     }
-  }, [messages, cartItems, hydrated, streamingId]);
+  }, [messages, cartItems, rollingSummary, summaryFoldCursor, hydrated, streamingId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -816,17 +830,25 @@ export default function Home() {
     setLoading(true);
     setDraft("");
 
-    const history = messages
+    const priorSnapshot = messages
       .filter((m) => m.id !== "welcome")
       .map((m) => ({ role: m.role, content: m.content }));
+    const history = priorSnapshot.slice(-VERBATIM_MESSAGE_CAP);
+    const summaryPayload = rollingSummary.trim().slice(0, MAX_CONVERSATION_SUMMARY_CHARS);
 
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", content: trimmed }]);
+
+    let assistantContent = "";
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, history }),
+        body: JSON.stringify({
+          message: trimmed,
+          history,
+          ...(summaryPayload ? { conversation_summary: summaryPayload } : {}),
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -864,16 +886,19 @@ export default function Home() {
           }
 
           if (event.type === "token") {
+            const piece = event.text as string;
+            assistantContent += piece;
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === msgId ? { ...m, content: m.content + (event.text as string) } : m
+                m.id === msgId ? { ...m, content: m.content + piece } : m
               )
             );
           } else if (event.type === "replace") {
             // Server overrode the streamed text (OOS / clarify)
+            assistantContent = String(event.text ?? "");
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === msgId ? { ...m, content: event.text as string } : m
+                m.id === msgId ? { ...m, content: assistantContent } : m
               )
             );
           } else if (event.type === "done") {
@@ -895,6 +920,15 @@ export default function Home() {
           }
         }
       }
+
+      const thread = [
+        ...priorSnapshot,
+        { role: "user" as const, content: trimmed },
+        { role: "assistant" as const, content: assistantContent },
+      ];
+      const folded = await foldRollingSummary(thread, rollingSummary, summaryFoldCursor);
+      setRollingSummary(folded.summary);
+      setSummaryFoldCursor(folded.foldCursor);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
@@ -906,6 +940,8 @@ export default function Home() {
   function clearConversation() {
     if (loading || streamingId) return;
     setMessages(buildWelcomeMessages());
+    setRollingSummary("");
+    setSummaryFoldCursor(0);
     setError(null);
     setDraft("");
   }

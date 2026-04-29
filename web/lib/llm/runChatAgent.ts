@@ -9,24 +9,23 @@ import {
   GET_INSTALL_GUIDE_TOOL_NAME,
   LOOKUP_PART_TOOL_NAME,
   NORMALIZE_PART_NUMBER_TOOL_NAME,
-  SEARCH_BY_SYMPTOM_TOOL_NAME,
   SEMANTIC_SEARCH_TOOL_NAME,
 } from "../agentTools";
-import catalog from "../../data/catalog.json";
 import { formatCatalogReplyFromRetrieval, formatMissingCompatPairReply } from "../formatCatalogReply";
-import type { Citation, SessionContext } from "../retrieveExact";
+import { resolveCatalogContext, type CatalogContext } from "../loadCatalog";
+import type { Citation, RetrievalResult, SessionContext } from "../retrieveExact";
 import {
   allowSessionCarryForRetrieval,
   modelTokenInCurrentMessage,
   retrieveExact,
 } from "../retrieveExact";
+import * as catalogDb from "../catalogDb";
+import { prisma } from "../prisma";
 import { fetchPartPageTool } from "../tools/fetchPartPage";
 import { semanticSearchTool } from "../tools/semanticSearch";
 import { executePartselectTool } from "../toolExecutor";
 import { PARTSELECT_OPENAI_TOOLS } from "./openaiTools";
 import { PARTSELECT_AGENT_SYSTEM } from "./systemPrompt";
-
-type RetrievalResult = ReturnType<typeof retrieveExact>;
 
 /**
  * Same gate as `retrieveExact`: only expose PS/model session to the LLM and
@@ -56,12 +55,13 @@ function pushCite(citations: Citation[], c: Citation) {
  * Priority: lookup_part → get_install_guide → check_compatibility →
  *           search_by_symptom. Returns null if no usable output was found.
  */
-type CatalogPart = (typeof catalog.parts)[number];
-type CatalogCompat = (typeof catalog.compatibilities)[number];
+type CatalogPart = import("../catalogTypes").CatalogShape["parts"][number];
+type CatalogCompat = import("../catalogTypes").CatalogShape["compatibilities"][number];
 
-function buildRetrievalFromTrace(
-  trace: ToolTraceEntry[]
-): RetrievalResult | null {
+async function buildRetrievalFromTrace(
+  trace: ToolTraceEntry[],
+  catalogCtx: CatalogContext
+): Promise<RetrievalResult | null> {
   const citations: Citation[] = [];
   let part: CatalogPart | undefined;
   let compatibility: CatalogCompat | undefined;
@@ -80,9 +80,13 @@ function buildRetrievalFromTrace(
     if (entry.name === GET_INSTALL_GUIDE_TOOL_NAME) {
       const o = entry.output as { ok?: boolean; partNumber?: string };
       if (o?.ok && o.partNumber && !part) {
-        part = (catalog.parts as CatalogPart[]).find(
-          (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
-        );
+        if (catalogCtx.mode === "memory") {
+          part = catalogCtx.catalog.parts.find(
+            (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
+          );
+        } else {
+          part = (await catalogDb.lookupPartByPs(o.partNumber)) ?? undefined;
+        }
         if (part) pushCite(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
       }
     }
@@ -90,7 +94,14 @@ function buildRetrievalFromTrace(
     if (entry.name === CHECK_COMPATIBILITY_TOOL_NAME) {
       const o = entry.output as { ok?: boolean; rowId?: string; partNumber?: string };
       if (o?.ok && o.rowId) {
-        compatibility ??= (catalog.compatibilities as CatalogCompat[]).find((r) => r.id === o.rowId);
+        if (!compatibility) {
+          if (catalogCtx.mode === "memory") {
+            compatibility = catalogCtx.catalog.compatibilities.find((r) => r.id === o.rowId);
+          } else {
+            const row = await prisma.catalogCompatibility.findUnique({ where: { id: o.rowId } });
+            compatibility = row ? (row.data as CatalogCompat) : undefined;
+          }
+        }
         if (compatibility) {
           pushCite(citations, {
             id: compatibility.id,
@@ -99,9 +110,13 @@ function buildRetrievalFromTrace(
           });
         }
         if (o.partNumber && !part) {
-          part = (catalog.parts as CatalogPart[]).find(
-            (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
-          );
+          if (catalogCtx.mode === "memory") {
+            part = catalogCtx.catalog.parts.find(
+              (p) => p.partNumber.toUpperCase() === o.partNumber!.toUpperCase()
+            );
+          } else {
+            part = (await catalogDb.lookupPartByPs(o.partNumber)) ?? undefined;
+          }
           if (part) pushCite(citations, { id: part.id, source: "part_catalog", label: "Part catalog" });
         }
       }
@@ -172,7 +187,7 @@ export type LlmChatResult = {
   tool_trace: ToolTraceEntry[];
   used_llm: true;
   /** Last catalog retrieval; API route builds blocks from this (not sent as a top-level field). */
-  retrieval: ReturnType<typeof retrieveExact>;
+  retrieval: RetrievalResult;
 };
 
 const MAX_TOOL_ROUNDS = 6;
@@ -187,12 +202,13 @@ async function runToolLoop(
   context: SessionContext | undefined,
   openai: OpenAI,
   model: string,
-  systemContent: string
+  systemContent: string,
+  catalogCtx: CatalogContext
 ): Promise<{
   messages: ChatCompletionMessageParam[];
   tool_trace: ToolTraceEntry[];
   normalized: Set<string>;
-  lastRetrieval: ReturnType<typeof retrieveExact>;
+  lastRetrieval: RetrievalResult;
 }> {
   const prior = history
     .slice(-MAX_PRIOR_CHAT_MESSAGES)
@@ -210,7 +226,7 @@ async function runToolLoop(
 
   const tool_trace: ToolTraceEntry[] = [];
   const normalized = new Set<string>();
-  let lastRetrieval: ReturnType<typeof retrieveExact> | null = null;
+  let lastRetrieval: RetrievalResult | null = null;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const completion = await openai.chat.completions.create({
@@ -250,7 +266,7 @@ async function runToolLoop(
           exec = { name: SEMANTIC_SEARCH_TOOL_NAME, ok: false, output: { error: "semantic_search_failed" } };
         }
       } else {
-        exec = executePartselectTool(name, argsJson, context);
+        exec = await executePartselectTool(name, argsJson, context, catalogCtx);
       }
 
       tool_trace.push({ name: exec.name, ok: exec.ok, output: exec.output });
@@ -260,7 +276,7 @@ async function runToolLoop(
         o.part_numbers.forEach((p) => normalized.add(p));
       }
       if (exec.ok && exec.name === CATALOG_SEARCH_TOOL_NAME && exec.output) {
-        lastRetrieval = exec.output as ReturnType<typeof retrieveExact>;
+        lastRetrieval = exec.output as RetrievalResult;
       }
 
       messages.push({
@@ -273,14 +289,15 @@ async function runToolLoop(
 
   if (!lastRetrieval) {
     lastRetrieval =
-      buildRetrievalFromTrace(tool_trace) ?? retrieveExact(userMessage, context);
+      (await buildRetrievalFromTrace(tool_trace, catalogCtx)) ??
+      (await retrieveExact(userMessage, context, catalogCtx));
     tool_trace.push({ name: CATALOG_SEARCH_TOOL_NAME, ok: true, output: lastRetrieval });
   }
 
   return { messages, tool_trace, normalized, lastRetrieval };
 }
 
-function buildSystemContent(context?: SessionContext): string {
+function buildSystemContent(context?: SessionContext, conversationSummary?: string): string {
   const contextLines: string[] = [];
   if (context?.partNumber) contextLines.push(`part ${context.partNumber}`);
   if (context?.model) contextLines.push(`model ${context.model}`);
@@ -288,12 +305,17 @@ function buildSystemContent(context?: SessionContext): string {
     contextLines.length > 0
       ? `\n\n[Session context — resolved from prior turns: ${contextLines.join(", ")}. Prefer these anchors when the user's *current* message continues the same parts task (install, price/stock, fit, or lookup). Do not call check_compatibility with them on vague follow-ups (e.g. "yes", "narrow it down") unless the user clearly means that specific part and model.]`
       : "";
-  return PARTSELECT_AGENT_SYSTEM + sessionNote;
+  const sum = conversationSummary?.trim();
+  const summaryNote =
+    sum && sum.length > 0
+      ? `\n\n[Earlier conversation — compressed summary. Verbatim recent turns follow as normal chat messages below. If a PS number or model in the summary disagrees with the recent turns, trust the recent turns.]\n\n${sum}`
+      : "";
+  return PARTSELECT_AGENT_SYSTEM + sessionNote + summaryNote;
 }
 
 function applyConsistencyGuard(
   replyText: string,
-  retrieval: ReturnType<typeof retrieveExact>,
+  retrieval: RetrievalResult,
   userMessage: string
 ): string {
   const hasContent = !!(
@@ -328,7 +350,7 @@ function replyImpliesNeedModelNumber(reply: string): boolean {
  */
 function applyCompatAskModelMismatchGuard(
   replyText: string,
-  retrieval: ReturnType<typeof retrieveExact>,
+  retrieval: RetrievalResult,
   userMessage: string,
   sessionContext: SessionContext | undefined
 ): string {
@@ -362,11 +384,12 @@ function isBareModelOnlyMessage(msg: string): boolean {
  * Part is known (often from session) and the user pasted a model, but there is no
  * compatibility row in the demo catalog — replace vague "can't confirm" LLM copy.
  */
-function applyMissingCompatPairGuard(
+async function applyMissingCompatPairGuard(
   replyText: string,
-  retrieval: ReturnType<typeof retrieveExact>,
-  userMessage: string
-): string {
+  retrieval: RetrievalResult,
+  userMessage: string,
+  catalogCtx: CatalogContext
+): Promise<string> {
   if (!retrieval.part || retrieval.compatibility) return replyText;
   if (!modelTokenInCurrentMessage(userMessage)) return replyText;
   const uncertain =
@@ -374,36 +397,40 @@ function applyMissingCompatPairGuard(
       replyText
     );
   if (!isBareModelOnlyMessage(userMessage) && !uncertain) return replyText;
-  return formatMissingCompatPairReply(retrieval.part.partNumber);
+  return formatMissingCompatPairReply(retrieval.part.partNumber, catalogCtx);
 }
 
-function applyRetrievalReplyGuards(
+async function applyRetrievalReplyGuards(
   replyText: string,
-  retrieval: ReturnType<typeof retrieveExact>,
+  retrieval: RetrievalResult,
   userMessage: string,
-  sessionContext: SessionContext | undefined
-): string {
+  sessionContext: SessionContext | undefined,
+  catalogCtx: CatalogContext
+): Promise<string> {
   let out = applyConsistencyGuard(replyText, retrieval, userMessage);
   out = applyCompatAskModelMismatchGuard(out, retrieval, userMessage, sessionContext);
-  out = applyMissingCompatPairGuard(out, retrieval, userMessage);
+  out = await applyMissingCompatPairGuard(out, retrieval, userMessage, catalogCtx);
   return out;
 }
 
 export async function runChatWithLlmTools(
   userMessage: string,
   history: HistoryTurn[] = [],
-  context?: SessionContext
+  context?: SessionContext,
+  conversationSummary?: string,
+  catalogArg?: CatalogContext
 ): Promise<LlmChatResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
+  const catalogCtx = catalogArg ?? (await resolveCatalogContext());
   const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
   const openai = new OpenAI({ apiKey });
   const gated = gatedSessionContext(userMessage, context);
-  const systemContent = buildSystemContent(gated);
+  const systemContent = buildSystemContent(gated, conversationSummary);
 
   const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
-    userMessage, history, gated, openai, model, systemContent
+    userMessage, history, gated, openai, model, systemContent, catalogCtx
   );
 
   const lastMsg = messages[messages.length - 1]!;
@@ -420,7 +447,7 @@ export async function runChatWithLlmTools(
   }
 
   if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
-  replyText = applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context);
+  replyText = await applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context, catalogCtx);
 
   return {
     reply: replyText,
@@ -441,18 +468,21 @@ export async function streamChatWithLlmTools(
   userMessage: string,
   history: HistoryTurn[],
   context: SessionContext | undefined,
-  onToken: (text: string) => void
+  onToken: (text: string) => void,
+  conversationSummary?: string,
+  catalogArg?: CatalogContext
 ): Promise<LlmChatResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
+  const catalogCtx = catalogArg ?? (await resolveCatalogContext());
   const model = (process.env.OPENAI_MODEL ?? "gpt-4o-mini").trim();
   const openai = new OpenAI({ apiKey });
   const gated = gatedSessionContext(userMessage, context);
-  const systemContent = buildSystemContent(gated);
+  const systemContent = buildSystemContent(gated, conversationSummary);
 
   const { messages, tool_trace, normalized, lastRetrieval } = await runToolLoop(
-    userMessage, history, gated, openai, model, systemContent
+    userMessage, history, gated, openai, model, systemContent, catalogCtx
   );
 
   // If the tool loop already produced a text reply (rare), stream it and return.
@@ -483,7 +513,7 @@ export async function streamChatWithLlmTools(
   }
 
   if (!replyText) replyText = formatCatalogReplyFromRetrieval(lastRetrieval, userMessage);
-  replyText = applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context);
+  replyText = await applyRetrievalReplyGuards(replyText, lastRetrieval, userMessage, context, catalogCtx);
 
   // If the guard overrode the reply, the tokens already sent were wrong — that's
   // a rare edge case; we accept it and let the client reconcile via the `done` event.

@@ -9,6 +9,7 @@ import {
   type ToolName,
   type ToolTraceEntry,
 } from "./agentTools";
+import type { CatalogContext } from "./loadCatalog";
 import type { SessionContext } from "./retrieveExact";
 import { retrieveExact } from "./retrieveExact";
 import { checkCompatibilityTool } from "./tools/checkCompatibility";
@@ -28,11 +29,12 @@ function fail(name: ToolName, error: string, extra?: Record<string, unknown>): T
   return { name, ok: false, output: { error, ...extra } };
 }
 
-export function executePartselectTool(
+export async function executePartselectTool(
   name: string,
   argsJson: string,
-  context?: SessionContext
-): ToolTraceEntry {
+  context: SessionContext | undefined,
+  catalogCtx: CatalogContext
+): Promise<ToolTraceEntry> {
   let args: unknown;
   try {
     args = argsJson ? JSON.parse(argsJson) : {};
@@ -77,7 +79,7 @@ export function executePartselectTool(
       return {
         name: CATALOG_SEARCH_TOOL_NAME,
         ok: true,
-        output: retrieveExact(query, context),
+        output: await retrieveExact(query, context, catalogCtx),
       };
     }
     case LOOKUP_PART_TOOL_NAME: {
@@ -85,7 +87,11 @@ export function executePartselectTool(
       if (typeof raw !== "string" || !raw.trim()) {
         return fail(LOOKUP_PART_TOOL_NAME, "part_number_required");
       }
-      return { name: LOOKUP_PART_TOOL_NAME, ok: true, output: lookupPartTool({ part_number: raw }) };
+      return {
+        name: LOOKUP_PART_TOOL_NAME,
+        ok: true,
+        output: await lookupPartTool({ part_number: raw }, catalogCtx),
+      };
     }
     case CHECK_COMPATIBILITY_TOOL_NAME: {
       const a = args as { part_number?: unknown; model?: unknown };
@@ -98,7 +104,7 @@ export function executePartselectTool(
       return {
         name: CHECK_COMPATIBILITY_TOOL_NAME,
         ok: true,
-        output: checkCompatibilityTool({ part_number: a.part_number, model: a.model }),
+        output: await checkCompatibilityTool({ part_number: a.part_number, model: a.model }, catalogCtx),
       };
     }
     case GET_INSTALL_GUIDE_TOOL_NAME: {
@@ -106,7 +112,11 @@ export function executePartselectTool(
       if (typeof raw !== "string" || !raw.trim()) {
         return fail(GET_INSTALL_GUIDE_TOOL_NAME, "part_number_required");
       }
-      return { name: GET_INSTALL_GUIDE_TOOL_NAME, ok: true, output: getInstallGuideTool({ part_number: raw }) };
+      return {
+        name: GET_INSTALL_GUIDE_TOOL_NAME,
+        ok: true,
+        output: await getInstallGuideTool({ part_number: raw }, catalogCtx),
+      };
     }
     case SEARCH_BY_SYMPTOM_TOOL_NAME: {
       const raw = (args as { symptom?: unknown }).symptom;
@@ -116,10 +126,12 @@ export function executePartselectTool(
       if (raw.length > MAX_QUERY_LEN) {
         return fail(SEARCH_BY_SYMPTOM_TOOL_NAME, "symptom_too_long", { limit: MAX_QUERY_LEN });
       }
-      return { name: SEARCH_BY_SYMPTOM_TOOL_NAME, ok: true, output: searchBySymptomTool({ symptom: raw }) };
+      return {
+        name: SEARCH_BY_SYMPTOM_TOOL_NAME,
+        ok: true,
+        output: await searchBySymptomTool({ symptom: raw }, catalogCtx),
+      };
     }
-    // semantic_search is async — caller must handle it separately (like fetch_part_page).
-    // If somehow called here synchronously, return a graceful no-op.
     case SEMANTIC_SEARCH_TOOL_NAME:
       return fail(SEMANTIC_SEARCH_TOOL_NAME, "use_async_path");
     default:

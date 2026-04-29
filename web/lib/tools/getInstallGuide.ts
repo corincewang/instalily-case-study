@@ -1,6 +1,8 @@
-import catalog from "../../data/catalog.json";
+import type { CatalogShape } from "../catalogTypes";
+import type { CatalogContext } from "../loadCatalog";
+import { lookupPartTool } from "./lookupPart";
 
-type Part = (typeof catalog.parts)[number];
+type Part = CatalogShape["parts"][number];
 type RepairStoryRaw = Record<string, unknown>;
 
 function getStories(part: Part): RepairStoryRaw[] {
@@ -20,7 +22,10 @@ function mode(values: (string | undefined)[]): string | undefined {
   let bestN = 0;
   for (const k of order) {
     const n = counts.get(k) ?? 0;
-    if (n > bestN) { best = k; bestN = n; }
+    if (n > bestN) {
+      best = k;
+      bestN = n;
+    }
   }
   return best;
 }
@@ -45,16 +50,17 @@ export type InstallGuideResult =
  * Return step-by-step install instructions for a part, enriched with
  * aggregated customer-experience signals (difficulty, time, tools).
  */
-export function getInstallGuideTool(input: {
-  part_number: string;
-}): InstallGuideResult {
-  const needle = input.part_number.trim().toUpperCase();
-  const part = catalog.parts.find(
-    (p) => p.partNumber.toUpperCase() === needle
-  );
-  if (!part) {
-    return { ok: false, error: `No part found for ${needle}` };
+export async function getInstallGuideTool(
+  input: {
+    part_number: string;
+  },
+  catalogCtx: CatalogContext
+): Promise<InstallGuideResult> {
+  const lookup = await lookupPartTool({ part_number: input.part_number }, catalogCtx);
+  if (!lookup.ok) {
+    return { ok: false, error: lookup.error };
   }
+  const part = lookup.part;
 
   const raw = part.installSteps ?? "";
   const steps = raw
@@ -63,7 +69,7 @@ export function getInstallGuideTool(input: {
     .filter((l) => l.length > 0);
 
   if (steps.length === 0) {
-    return { ok: false, error: `No install steps recorded for ${needle}` };
+    return { ok: false, error: `No install steps recorded for ${part.partNumber}` };
   }
 
   const stories = getStories(part);
