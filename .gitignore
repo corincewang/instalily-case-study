@@ -1,4 +1,4 @@
-# Root (CRA legacy)
+# Repository root (thin package.json / optional local installs)
 node_modules/
 build/
 coverage/
